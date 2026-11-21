@@ -3,8 +3,7 @@ package no_implied_eval
 import (
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -52,7 +51,7 @@ var NoImpliedEvalRule = rule.Rule{
 
 		isFunctionType := func(node *ast.Node) bool {
 			t := ctx.TypeChecker.GetTypeAtLocation(node)
-			symbol := checker.Type_symbol(t)
+			symbol := t.Symbol()
 
 			if symbol != nil && utils.IsSymbolFlagSet(symbol, ast.SymbolFlagsFunction|ast.SymbolFlagsMethod) {
 				return true
@@ -95,7 +94,7 @@ var NoImpliedEvalRule = rule.Rule{
 
 			if calleeName == "Function" {
 				t := ctx.TypeChecker.GetTypeAtLocation(node.Expression())
-				symbol := checker.Type_symbol(t)
+				symbol := t.Symbol()
 
 				if symbol != nil {
 					if utils.IsBuiltinSymbolLike(ctx.Program, ctx.TypeChecker, t, "FunctionConstructor") {
@@ -115,7 +114,7 @@ var NoImpliedEvalRule = rule.Rule{
 
 			if slices.Contains(evalLikeFunctions, calleeName) && !isFunction(handler) {
 				symbol := ctx.TypeChecker.GetSymbolAtLocation(node.Expression())
-				if symbol == nil || !utils.Some(symbol.Declarations, func(d *ast.Node) bool {
+				if symbol == nil || !utils.Some(symbol.Declarations(), func(d *ast.Node) bool {
 					return ast.GetSourceFileOfNode(d) == ctx.SourceFile
 				}) {
 					ctx.ReportNode(handler, buildNoImpliedEvalErrorMessage())

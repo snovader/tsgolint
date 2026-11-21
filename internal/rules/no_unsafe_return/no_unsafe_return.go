@@ -3,9 +3,9 @@ package no_unsafe_return
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -104,7 +104,7 @@ var NoUnsafeReturnRule = rule.Rule{
 				var expectedType string
 				if functionNode.Type() != nil || usesContextualType {
 					if len(callSignatures) > 0 {
-						expectedType = renderReturnType(ctx.TypeChecker, checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, callSignatures[0]))
+						expectedType = renderReturnType(ctx.TypeChecker, ctx.TypeChecker.GetReturnTypeOfSignature(callSignatures[0]))
 					}
 				}
 				ctx.ReportDiagnostic(buildUnsafeReturnDiagnostic(
@@ -118,7 +118,7 @@ var NoUnsafeReturnRule = rule.Rule{
 			// function return type, we shouldn't complain (it's intentional, even if unsafe)
 			if functionNode.Type() != nil {
 				for _, signature := range callSignatures {
-					signatureReturnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+					signatureReturnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 
 					if returnNodeType == signatureReturnType ||
 						utils.IsTypeFlagSet(
@@ -128,8 +128,8 @@ var NoUnsafeReturnRule = rule.Rule{
 						return
 					}
 					if ast.HasSyntacticModifier(functionNode, ast.ModifierFlagsAsync) {
-						awaitedSignatureReturnType := checker.Checker_getAwaitedType(ctx.TypeChecker, signatureReturnType)
-						awaitedReturnNodeType := checker.Checker_getAwaitedType(ctx.TypeChecker, returnNodeType)
+						awaitedSignatureReturnType := ctx.TypeChecker.GetAwaitedType(signatureReturnType)
+						awaitedReturnNodeType := ctx.TypeChecker.GetAwaitedType(returnNodeType)
 
 						if awaitedSignatureReturnType == awaitedReturnNodeType || (awaitedSignatureReturnType != nil && utils.IsTypeFlagSet(awaitedSignatureReturnType, checker.TypeFlagsAny|checker.TypeFlagsUnknown)) {
 							return
@@ -142,7 +142,7 @@ var NoUnsafeReturnRule = rule.Rule{
 				// Allow cases when the declared return type of the function is either unknown or unknown[]
 				// and the function is returning any or any[].
 				for _, signature := range callSignatures {
-					functionReturnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+					functionReturnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 					if anyType == utils.DiscriminatedAnyTypeAny && utils.IsTypeUnknownType(functionReturnType) {
 						return
 					}
@@ -150,7 +150,7 @@ var NoUnsafeReturnRule = rule.Rule{
 					if anyType == utils.DiscriminatedAnyTypeAnyArray && utils.IsTypeUnknownArrayType(functionReturnType, ctx.TypeChecker) {
 						return
 					}
-					awaitedType := checker.Checker_getAwaitedType(ctx.TypeChecker, functionReturnType)
+					awaitedType := ctx.TypeChecker.GetAwaitedType(functionReturnType)
 					if awaitedType != nil &&
 						anyType == utils.DiscriminatedAnyTypePromiseAny &&
 						utils.IsTypeUnknownType(awaitedType) {
@@ -191,7 +191,7 @@ var NoUnsafeReturnRule = rule.Rule{
 			}
 
 			signature := callSignatures[0]
-			functionReturnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+			functionReturnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 
 			receiver, sender, unsafe := utils.IsUnsafeAssignment(
 				returnNodeType,

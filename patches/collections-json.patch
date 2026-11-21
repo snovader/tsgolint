@@ -1,0 +1,41 @@
+--- a/internal/collections/ordered_map.go
++++ b/internal/collections/ordered_map.go
+@@ -9,7 +9,8 @@
+ 	"slices"
+ 	"strconv"
+ 
+-	"github.com/microsoft/TypeScript/tsc/internal/json"
++	"github.com/go-json-experiment/json"
++ "github.com/go-json-experiment/json/jsontext"
+ )
+ 
+ // OrderedMap is an insertion ordered map.
+@@ -227,8 +228,8 @@
+ 
+ var _ json.MarshalerTo = (*OrderedMap[string, string])(nil)
+ 
+-func (m *OrderedMap[K, V]) MarshalJSONTo(enc *json.Encoder) error {
+-	if err := enc.WriteToken(json.BeginObject); err != nil {
++func (m *OrderedMap[K, V]) MarshalJSONTo(enc *jsontext.Encoder) error {
++	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+ 		return err
+ 	}
+ 
+@@ -248,7 +249,7 @@
+ 		}
+ 	}
+ 
+-	return enc.WriteToken(json.EndObject)
++	return enc.WriteToken(jsontext.EndObject)
+ }
+ 
+ func resolveKeyName(k reflect.Value) (string, error) {
+@@ -273,7 +274,7 @@
+ 
+ var _ json.UnmarshalerFrom = (*OrderedMap[string, string])(nil)
+ 
+-func (m *OrderedMap[K, V]) UnmarshalJSONFrom(dec *json.Decoder) error {
++func (m *OrderedMap[K, V]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+ 	token, err := dec.ReadToken()
+ 	if err != nil {
+ 		return err

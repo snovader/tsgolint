@@ -1,8 +1,8 @@
 package no_for_in_array
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -19,12 +19,12 @@ var NoForInArrayRule = rule.Rule{
 	Name: "no-for-in-array",
 	Run: func(ctx rule.RuleContext, options any) rule.RuleListeners {
 		hasArrayishLength := func(t *checker.Type) bool {
-			lengthProperty := checker.Checker_getPropertyOfType(ctx.TypeChecker, t, "length")
+			lengthProperty := ctx.TypeChecker.GetPropertyOfType(t, "length")
 			if lengthProperty == nil {
 				return false
 			}
 
-			return utils.IsTypeFlagSet(checker.Checker_getTypeOfSymbol(ctx.TypeChecker, lengthProperty), checker.TypeFlagsNumberLike)
+			return utils.IsTypeFlagSet(ctx.TypeChecker.GetTypeOfSymbol(lengthProperty), checker.TypeFlagsNumberLike)
 		}
 		isArrayLike := func(t *checker.Type) bool {
 			return utils.TypeRecurser(t, func(t *checker.Type) bool {

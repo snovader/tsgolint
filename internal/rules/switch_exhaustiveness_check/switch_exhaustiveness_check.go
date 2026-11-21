@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/dlclark/regexp2/v2"
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -37,7 +37,7 @@ func buildSwitchIsNotExhaustiveMessage(missingBranches string) rule.RuleMessage 
 type SwitchMetadata struct {
 	ContainsNonLiteralType bool
 	// Both are nil if there is no default case or matching default-case comment.
-	DefaultCase               *ast.CaseOrDefaultClause
+	DefaultCase               *ast.Node
 	DefaultCaseComment        *ast.CommentRange
 	MissingLiteralBranchTypes []*checker.Type
 	SymbolName                string
@@ -108,9 +108,9 @@ func getCommentDefaultCase(sourceFile *ast.SourceFile, node *ast.SwitchStatement
 func getSwitchMetadata(sourceFile *ast.SourceFile, typeChecker *checker.Checker, node *ast.SwitchStatement, commentPattern *regexp2.Regexp) *SwitchMetadata {
 	cases := node.CaseBlock.AsCaseBlock().Clauses.Nodes
 	defaultCaseIndex := slices.IndexFunc(cases, ast.IsDefaultClause)
-	var defaultCase *ast.CaseOrDefaultClause
+	var defaultCase *ast.Node
 	if defaultCaseIndex > -1 {
-		defaultCase = cases[defaultCaseIndex].AsCaseOrDefaultClause()
+		defaultCase = cases[defaultCaseIndex]
 	}
 	var defaultCaseComment *ast.CommentRange
 	if defaultCase == nil {
@@ -120,7 +120,7 @@ func getSwitchMetadata(sourceFile *ast.SourceFile, typeChecker *checker.Checker,
 	discriminantType := utils.GetConstrainedTypeAtLocation(typeChecker, node.Expression)
 	symbolName := ""
 	if discriminantType.Symbol() != nil {
-		symbolName = discriminantType.Symbol().Name
+		symbolName = discriminantType.Symbol().Name()
 	}
 
 	caseTypeSet := make(map[*checker.Type]struct{}, len(cases))
@@ -130,7 +130,7 @@ func getSwitchMetadata(sourceFile *ast.SourceFile, typeChecker *checker.Checker,
 			continue
 		}
 
-		caseType := utils.GetConstrainedTypeAtLocation(typeChecker, c.AsCaseOrDefaultClause().Expression)
+		caseType := utils.GetConstrainedTypeAtLocation(typeChecker, c.AsCaseClause().Expression)
 		caseTypeSet[caseType] = struct{}{}
 		if utils.IsTypeFlagSet(caseType, checker.TypeFlagsUndefined) {
 			hasUndefinedCase = true
@@ -181,7 +181,7 @@ func getNodeIndent(sourceFile *ast.SourceFile, node *ast.Node) string {
 func buildCaseTest(typeChecker *checker.Checker, missingBranchType *checker.Type, symbolName string) string {
 	missingBranchName := ""
 	if missingBranchType.Symbol() != nil {
-		missingBranchName = missingBranchType.Symbol().Name
+		missingBranchName = missingBranchType.Symbol().Name()
 	}
 
 	caseTest := ""
@@ -216,7 +216,7 @@ func buildMissingCases(typeChecker *checker.Checker, missingBranchTypes []*check
 	return missingCases
 }
 
-func applyMissingCases(sourceFile *ast.SourceFile, node *ast.SwitchStatement, defaultCase *ast.CaseOrDefaultClause, missingCases []string) []rule.RuleFix {
+func applyMissingCases(sourceFile *ast.SourceFile, node *ast.SwitchStatement, defaultCase *ast.Node, missingCases []string) []rule.RuleFix {
 	cases := node.CaseBlock.AsCaseBlock().Clauses.Nodes
 
 	var lastCase *ast.Node
@@ -250,7 +250,7 @@ func applyMissingCases(sourceFile *ast.SourceFile, node *ast.SwitchStatement, de
 			}
 
 			return []rule.RuleFix{
-				rule.RuleFixInsertBefore(sourceFile, &defaultCase.Node, beforeFixBuilder.String()),
+				rule.RuleFixInsertBefore(sourceFile, defaultCase, beforeFixBuilder.String()),
 			}
 		}
 
@@ -268,7 +268,7 @@ func applyMissingCases(sourceFile *ast.SourceFile, node *ast.SwitchStatement, de
 	}
 }
 
-func fixSwitch(sourceFile *ast.SourceFile, typeChecker *checker.Checker, node *ast.SwitchStatement, missingBranchTypes []*checker.Type, defaultCase *ast.CaseOrDefaultClause, symbolName string) []rule.RuleFix {
+func fixSwitch(sourceFile *ast.SourceFile, typeChecker *checker.Checker, node *ast.SwitchStatement, missingBranchTypes []*checker.Type, defaultCase *ast.Node, symbolName string) []rule.RuleFix {
 	missingCases := buildMissingCases(typeChecker, missingBranchTypes, symbolName)
 	return applyMissingCases(sourceFile, node, defaultCase, missingCases)
 }
@@ -295,7 +295,7 @@ var SwitchExhaustivenessCheckRule = rule.Rule{
 				missingBranches := make([]string, 0, len(switchMetadata.MissingLiteralBranchTypes))
 				for _, missingType := range switchMetadata.MissingLiteralBranchTypes {
 					if utils.IsTypeFlagSet(missingType, checker.TypeFlagsESSymbolLike) && missingType.Symbol() != nil {
-						missingBranches = append(missingBranches, "typeof "+missingType.Symbol().Name)
+						missingBranches = append(missingBranches, "typeof "+missingType.Symbol().Name())
 						continue
 					}
 
@@ -322,7 +322,7 @@ var SwitchExhaustivenessCheckRule = rule.Rule{
 				if switchMetadata.DefaultCaseComment != nil {
 					ctx.ReportRange(switchMetadata.DefaultCaseComment.TextRange, buildDangerousDefaultCaseMessage())
 				} else {
-					ctx.ReportNode(&switchMetadata.DefaultCase.Node, buildDangerousDefaultCaseMessage())
+					ctx.ReportNode(switchMetadata.DefaultCase, buildDangerousDefaultCaseMessage())
 				}
 			}
 		}

@@ -1,72 +1,31 @@
 package utils
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 
-	"github.com/microsoft/typescript-go/shim/parser"
-	"github.com/microsoft/typescript-go/shim/tsoptions"
-	"github.com/microsoft/typescript-go/shim/tspath"
-	"github.com/microsoft/typescript-go/shim/vfs"
-	"github.com/microsoft/typescript-go/shim/vfs/cachedvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/parser"
+	"github.com/microsoft/TypeScript/tsc/shim/pnp"
+	"github.com/microsoft/TypeScript/tsc/shim/tsoptions"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/cachedvfs"
 	"github.com/typescript-eslint/tsgolint/internal/collections"
 )
 
 var _ compiler.CompilerHost = (*compilerHost)(nil)
 
 type compilerHost struct {
-	currentDirectory          string
-	fs                        vfs.FS
-	defaultLibraryPath        string
-	extendedConfigCache       tsoptions.ExtendedConfigCache
-	trace                     func(msg *ast.DiagnosticsMessage, args ...any)
-	resolvedProjectReferences collections.SyncMap[tspath.Path, *tsoptions.ParsedCommandLine]
+	compiler.CompilerHost
 }
 
-func NewCachedFSCompilerHost(
-	currentDirectory string,
-	fs vfs.FS,
-	defaultLibraryPath string,
-	extendedConfigCache tsoptions.ExtendedConfigCache,
-	trace func(msg *ast.DiagnosticsMessage, args ...any),
-) compiler.CompilerHost {
+func NewCachedFSCompilerHost(currentDirectory string, fs vfs.FS, defaultLibraryPath tspath.RootedDirectoryPath, extendedConfigCache tsoptions.ExtendedConfigCache, trace func(msg *ast.DiagnosticsMessage, args ...any)) compiler.CompilerHost {
 	return NewCompilerHost(currentDirectory, cachedvfs.From(fs), defaultLibraryPath, extendedConfigCache, trace)
 }
 
-func NewCompilerHost(
-	currentDirectory string,
-	fs vfs.FS,
-	defaultLibraryPath string,
-	extendedConfigCache tsoptions.ExtendedConfigCache,
-	trace func(msg *ast.DiagnosticsMessage, args ...any),
-) compiler.CompilerHost {
-	if trace == nil {
-		trace = func(msg *ast.DiagnosticsMessage, args ...any) {}
-	}
-	return &compilerHost{
-		currentDirectory:    currentDirectory,
-		fs:                  fs,
-		defaultLibraryPath:  defaultLibraryPath,
-		extendedConfigCache: extendedConfigCache,
-		trace:               trace,
-	}
-}
-
-func (h *compilerHost) FS() vfs.FS {
-	return h.fs
-}
-
-func (h *compilerHost) DefaultLibraryPath() string {
-	return h.defaultLibraryPath
-}
-
-func (h *compilerHost) GetCurrentDirectory() string {
-	return h.currentDirectory
-}
-
-func (h *compilerHost) Trace(msg *ast.DiagnosticsMessage, args ...any) {
-	h.trace(msg, args...)
+func NewCompilerHost(currentDirectory string, fs vfs.FS, defaultLibraryPath tspath.RootedDirectoryPath, extendedConfigCache tsoptions.ExtendedConfigCache, trace func(msg *ast.DiagnosticsMessage, args ...any)) compiler.CompilerHost {
+	return &compilerHost{compiler.NewCompilerHost(fs, defaultLibraryPath, extendedConfigCache, pnp.InitPnpApi(fs, currentDirectory), trace, nil)}
 }
 
 var sourceFileCache collections.SyncMap[SourceFileCacheKey, *ast.SourceFile]
@@ -93,7 +52,7 @@ func (h *compilerHost) GetSourceFile(opts ast.SourceFileParseOptions) *ast.Sourc
 
 	scriptKind := core.GetScriptKindFromFileName(opts.FileName)
 	if scriptKind == core.ScriptKindUnknown {
-		panic("Unknown script kind for file  " + opts.FileName)
+		panic("Unknown script kind for file  " + opts.FileName.AsString())
 	}
 
 	key := GetSourceFileCacheKey(opts, text, scriptKind)
@@ -104,14 +63,5 @@ func (h *compilerHost) GetSourceFile(opts ast.SourceFileParseOptions) *ast.Sourc
 
 	sourceFile := parser.ParseSourceFile(opts, text, scriptKind)
 	result, _ := sourceFileCache.LoadOrStore(key, sourceFile)
-	return result
-}
-
-func (h *compilerHost) GetResolvedProjectReference(fileName string, path tspath.Path) *tsoptions.ParsedCommandLine {
-	if cached, ok := h.resolvedProjectReferences.Load(path); ok {
-		return cached
-	}
-	commandLine, _ := tsoptions.GetParsedCommandLineOfConfigFilePath(fileName, path, nil, nil, h, h.extendedConfigCache)
-	result, _ := h.resolvedProjectReferences.LoadOrStore(path, commandLine)
 	return result
 }

@@ -1,8 +1,8 @@
 package require_array_sort_compare
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -38,8 +38,8 @@ var RequireArraySortCompareRule = rule.Rule{
 				calleeObjType := utils.GetConstrainedTypeAtLocation(ctx.TypeChecker, callee.Expression())
 
 				if opts.IgnoreStringArrays && checker.Checker_isArrayOrTupleType(ctx.TypeChecker, calleeObjType) {
-					if utils.Every(checker.Checker_getTypeArguments(ctx.TypeChecker, calleeObjType), func(t *checker.Type) bool {
-						if constraint := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, t); constraint != nil {
+					if utils.Every(ctx.TypeChecker.GetTypeArguments(calleeObjType), func(t *checker.Type) bool {
+						if constraint := ctx.TypeChecker.GetBaseConstraintOfType(t); constraint != nil {
 							t = constraint
 						}
 						return utils.IsTypeFlagSet(t, checker.TypeFlagsString) || utils.GetTypeName(ctx.TypeChecker, t) == "string"
@@ -49,7 +49,7 @@ var RequireArraySortCompareRule = rule.Rule{
 				}
 
 				if utils.Every(utils.UnionTypeParts(calleeObjType), func(t *checker.Type) bool {
-					return checker.Checker_isArrayType(ctx.TypeChecker, t) || checker.IsTupleType(t)
+					return ctx.TypeChecker.IsArrayType(t) || checker.IsTupleType(t)
 				}) {
 					ctx.ReportNode(node, buildRequireCompareMessage())
 				}

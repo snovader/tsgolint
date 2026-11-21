@@ -3,8 +3,9 @@ package main
 import (
 	"testing"
 
-	"github.com/microsoft/typescript-go/shim/vfs"
-	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/osvfs"
 )
 
 type caseSensitivityFS struct {
@@ -12,7 +13,12 @@ type caseSensitivityFS struct {
 	caseSensitive bool
 }
 
-func (fs caseSensitivityFS) UseCaseSensitiveFileNames() bool { return fs.caseSensitive }
+func (fs caseSensitivityFS) CaseSensitivity() tspath.CaseSensitivity {
+	if fs.caseSensitive {
+		return tspath.CaseSensitive
+	}
+	return tspath.CaseInsensitive
+}
 
 func TestOverlayFSFileNameCasing(t *testing.T) {
 	for _, caseSensitive := range []bool{false, true} {
@@ -24,7 +30,7 @@ func TestOverlayFSFileNameCasing(t *testing.T) {
 			overlay := newOverlayFS(caseSensitivityFS{osvfs.FS(), caseSensitive}, map[string]string{
 				"/virtual/Project/File.ts": "editor content",
 			})
-			path := "/virtual/project/file.ts"
+			path := tspath.RootedFilePathFromAbsolute("/virtual/project/file.ts")
 			if got := overlay.FileExists(path); got != !caseSensitive {
 				t.Errorf("FileExists(%q) = %v", path, got)
 			}
@@ -57,7 +63,7 @@ func TestOverlayFS(t *testing.T) {
 		t.Error("Expected file to exist")
 	}
 
-	if overlay.UseCaseSensitiveFileNames() != baseFS.UseCaseSensitiveFileNames() {
+	if overlay.CaseSensitivity() != baseFS.CaseSensitivity() {
 		t.Error("Expected UseCaseSensitiveFileNames to match base FS")
 	}
 }

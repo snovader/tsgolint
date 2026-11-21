@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
 
@@ -25,15 +25,15 @@ type enumTypeChecker struct {
 }
 
 func (c *enumTypeChecker) constraint(t *checker.Type) *checker.Type {
-	if constraint := checker.Checker_getBaseConstraintOfType(c.checker, t); constraint != nil {
+	if constraint := c.checker.GetBaseConstraintOfType(t); constraint != nil {
 		return constraint
 	}
 	return t
 }
 
 func (c *enumTypeChecker) typeArguments(t *checker.Type) []*checker.Type {
-	if utils.IsTypeFlagSet(t, checker.TypeFlagsObject) && checker.Type_objectFlags(t)&checker.ObjectFlagsReference != 0 {
-		return checker.Checker_getTypeArguments(c.checker, t)
+	if utils.IsTypeFlagSet(t, checker.TypeFlagsObject) && t.ObjectFlags()&checker.ObjectFlagsReference != 0 {
+		return c.checker.GetTypeArguments(t)
 	}
 	return nil
 }
@@ -99,9 +99,9 @@ func (c *enumTypeChecker) deepMismatch(sender, receiver *checker.Type, visited m
 	if senderElement != nil && receiverElement != nil && c.deepMismatch(senderElement, receiverElement, visited, depth+1, generic || withinGenericMembers) {
 		return true
 	}
-	for _, receiverProperty := range checker.Checker_getPropertiesOfType(c.checker, receiver) {
-		senderProperty := checker.Checker_getPropertyOfType(c.checker, sender, receiverProperty.Name)
-		if senderProperty != nil && c.deepMismatch(checker.Checker_getTypeOfSymbol(c.checker, senderProperty), checker.Checker_getTypeOfSymbol(c.checker, receiverProperty), visited, depth+1, generic || withinGenericMembers) {
+	for _, receiverProperty := range c.checker.GetPropertiesOfType(receiver) {
+		senderProperty := c.checker.GetPropertyOfType(sender, receiverProperty.Name())
+		if senderProperty != nil && c.deepMismatch(c.checker.GetTypeOfSymbol(senderProperty), c.checker.GetTypeOfSymbol(receiverProperty), visited, depth+1, generic || withinGenericMembers) {
 			return true
 		}
 	}
@@ -142,7 +142,7 @@ func (c *enumTypeChecker) directMismatch(sender, receiver *checker.Type) bool {
 			}
 		}
 		if !shared && !slices.ContainsFunc(nonEnums, func(receiver *checker.Type) bool {
-			return checker.Checker_isTypeAssignableTo(c.checker, part, receiver)
+			return c.checker.IsTypeAssignableTo(part, receiver)
 		}) {
 			return true
 		}
@@ -172,8 +172,8 @@ func (c *enumTypeChecker) describe(types []*checker.Type) string {
 		if element := c.checker.GetNumberIndexType(t); element != nil {
 			visit(element, depth+1)
 		}
-		for _, property := range checker.Checker_getPropertiesOfType(c.checker, t) {
-			visit(checker.Checker_getTypeOfSymbol(c.checker, property), depth+1)
+		for _, property := range c.checker.GetPropertiesOfType(t) {
+			visit(c.checker.GetTypeOfSymbol(property), depth+1)
 		}
 	}
 	for _, t := range types {
@@ -198,19 +198,19 @@ func mappedKeyConstraintTypes(typeChecker *checker.Checker, declaration *ast.Nod
 		return nil
 	}
 	if ast.IsTypeReferenceNode(typeNode) {
-		t := checker.Checker_getTypeFromTypeNode(typeChecker, typeNode)
-		if utils.IsObjectType(t) && checker.Type_objectFlags(t)&checker.ObjectFlagsMapped != 0 {
-			if symbol := checker.Type_symbol(t); symbol != nil {
-				for _, declaration := range symbol.Declarations {
+		t := typeChecker.GetTypeFromTypeNode(typeNode)
+		if utils.IsObjectType(t) && t.ObjectFlags()&checker.ObjectFlagsMapped != 0 {
+			if symbol := t.Symbol(); symbol != nil {
+				for _, declaration := range symbol.Declarations() {
 					if ast.IsMappedTypeNode(declaration) && declaration.AsMappedTypeNode().NameType != nil {
 						return nil
 					}
 				}
 			}
-			checker.Checker_getPropertiesOfType(typeChecker, t)
-			constraint := checker.MappedType_constraintType(t.AsMappedType())
+			typeChecker.GetPropertiesOfType(t)
+			constraint := t.AsMappedType().ConstraintType()
 			if constraint != nil {
-				constrained := checker.Checker_getBaseConstraintOfType(typeChecker, constraint)
+				constrained := typeChecker.GetBaseConstraintOfType(constraint)
 				if constrained == nil {
 					constrained = constraint
 				}
@@ -223,7 +223,7 @@ func mappedKeyConstraintTypes(typeChecker *checker.Checker, declaration *ast.Nod
 	if ast.IsMappedTypeNode(typeNode) {
 		constraint := typeNode.AsMappedTypeNode().TypeParameter.AsTypeParameterDeclaration().Constraint
 		if constraint != nil {
-			return []*checker.Type{checker.Checker_getTypeFromTypeNode(typeChecker, constraint)}
+			return []*checker.Type{typeChecker.GetTypeFromTypeNode(constraint)}
 		}
 	}
 	var result []*checker.Type

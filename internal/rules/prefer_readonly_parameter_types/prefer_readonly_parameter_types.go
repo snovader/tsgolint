@@ -1,9 +1,9 @@
 package prefer_readonly_parameter_types
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -36,7 +36,7 @@ func isTypeReadonlyArrayOrTuple(
 	seenTypes map[*checker.Type]struct{},
 ) readonlyness {
 	checkTypeArguments := func(arrayType *checker.Type) readonlyness {
-		typeArguments := checker.Checker_getTypeArguments(typeChecker, arrayType)
+		typeArguments := typeChecker.GetTypeArguments(arrayType)
 		if len(typeArguments) == 0 {
 			return readonlynessReadonly
 		}
@@ -50,9 +50,9 @@ func isTypeReadonlyArrayOrTuple(
 		return readonlynessReadonly
 	}
 
-	if checker.Checker_isArrayType(typeChecker, t) {
-		symbol := checker.Type_symbol(t)
-		if symbol != nil && symbol.Name == "Array" {
+	if typeChecker.IsArrayType(t) {
+		symbol := t.Symbol()
+		if symbol != nil && symbol.Name() == "Array" {
 			return readonlynessMutable
 		}
 
@@ -69,7 +69,7 @@ func isTypeReadonlyArrayOrTuple(
 			return readonlynessUnknown
 		}
 
-		if !checker.TupleType_readonly(tupleTarget.AsTupleType()) {
+		if !tupleTarget.AsTupleType().IsReadonly() {
 			return readonlynessMutable
 		}
 
@@ -84,12 +84,12 @@ func propertyHasPrivateIdentifierName(property *ast.Symbol) bool {
 		return false
 	}
 
-	if property.ValueDeclaration != nil {
-		name := property.ValueDeclaration.Name()
+	if property.ValueDeclaration() != nil {
+		name := property.ValueDeclaration().Name()
 		return name != nil && name.Kind == ast.KindPrivateIdentifier
 	}
 
-	for _, declaration := range property.Declarations {
+	for _, declaration := range property.Declarations() {
 		if declaration == nil {
 			continue
 		}
@@ -104,7 +104,7 @@ func propertyHasPrivateIdentifierName(property *ast.Symbol) bool {
 
 func propertyIsPrivateMappedProperty(property *ast.Symbol) bool {
 	return property != nil &&
-		property.CheckFlags&ast.CheckFlagsMapped != 0 &&
+		property.CheckFlags()&ast.CheckFlagsMapped != 0 &&
 		checker.GetDeclarationModifierFlagsFromSymbol(property)&ast.ModifierFlagsPrivate != 0
 }
 
@@ -113,23 +113,23 @@ func propertyIsReadonly(typeChecker *checker.Checker, property *ast.Symbol) bool
 		return false
 	}
 
-	if checker.Checker_isReadonlySymbol(typeChecker, property) {
+	if typeChecker.IsReadonlySymbol(property) {
 		return true
 	}
 
-	if property.CheckFlags&ast.CheckFlagsReadonly != 0 {
+	if property.CheckFlags()&ast.CheckFlagsReadonly != 0 {
 		return true
 	}
 
-	if property.CheckFlags&ast.CheckFlagsSyntheticMethod != 0 {
+	if property.CheckFlags()&ast.CheckFlagsSyntheticMethod != 0 {
 		return true
 	}
 
-	if property.Flags&ast.SymbolFlagsMethod != 0 && property.CheckFlags&ast.CheckFlagsMapped != 0 {
+	if property.Flags()&ast.SymbolFlagsMethod != 0 && property.CheckFlags()&ast.CheckFlagsMapped != 0 {
 		return true
 	}
 
-	if property.ValueDeclaration == nil && property.CheckFlags&ast.CheckFlagsMapped != 0 {
+	if property.ValueDeclaration() == nil && property.CheckFlags()&ast.CheckFlagsMapped != 0 {
 		return true
 	}
 
@@ -143,9 +143,9 @@ func isTypeReadonlyObject(
 	opts readonlynessOptions,
 	seenTypes map[*checker.Type]struct{},
 ) readonlyness {
-	properties := checker.Checker_getPropertiesOfType(typeChecker, t)
+	properties := typeChecker.GetPropertiesOfType(t)
 	for _, property := range properties {
-		if opts.treatMethodsAsReadonly && property.Flags&ast.SymbolFlagsMethod != 0 {
+		if opts.treatMethodsAsReadonly && property.Flags()&ast.SymbolFlagsMethod != 0 {
 			continue
 		}
 
@@ -166,7 +166,7 @@ func isTypeReadonlyObject(
 	}
 
 	for _, property := range properties {
-		if property.Flags&ast.SymbolFlagsMethod != 0 {
+		if property.Flags()&ast.SymbolFlagsMethod != 0 {
 			continue
 		}
 
@@ -178,9 +178,9 @@ func isTypeReadonlyObject(
 			continue
 		}
 
-		propertyType := checker.Checker_getTypeOfPropertyOfType(typeChecker, t, property.Name)
+		propertyType := typeChecker.GetTypeOfPropertyOfType(t, property.Name())
 		if propertyType == nil {
-			propertyType = checker.Checker_getTypeOfSymbol(typeChecker, property)
+			propertyType = typeChecker.GetTypeOfSymbol(property)
 		}
 
 		if propertyType == nil {
@@ -196,7 +196,7 @@ func isTypeReadonlyObject(
 		}
 	}
 
-	for _, info := range checker.Checker_getIndexInfosOfType(typeChecker, t) {
+	for _, info := range typeChecker.GetIndexInfosOfType(t) {
 		if !info.IsReadonly() {
 			return readonlynessMutable
 		}
@@ -245,7 +245,7 @@ func isTypeReadonlyRecurser(
 	if utils.IsIntersectionType(t) {
 		hasArrayOrTuple := false
 		for _, subType := range t.Types() {
-			if checker.Checker_isArrayType(typeChecker, subType) || checker.IsTupleType(subType) {
+			if typeChecker.IsArrayType(subType) || checker.IsTupleType(subType) {
 				hasArrayOrTuple = true
 				break
 			}
@@ -273,7 +273,7 @@ func isTypeReadonlyRecurser(
 		return readonlynessReadonly
 	}
 
-	if len(utils.GetCallSignatures(typeChecker, t)) > 0 && len(checker.Checker_getPropertiesOfType(typeChecker, t)) == 0 {
+	if len(utils.GetCallSignatures(typeChecker, t)) > 0 && len(typeChecker.GetPropertiesOfType(t)) == 0 {
 		return readonlynessReadonly
 	}
 
@@ -300,7 +300,7 @@ func isTypeReadonly(
 }
 
 func isLiteralOrTaggablePrimitiveLike(t *checker.Type) bool {
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 	if flags&checker.TypeFlagsLiteral != 0 {
 		return true
 	}
@@ -365,7 +365,7 @@ func getParameterType(typeChecker *checker.Checker, parameter *ast.Node) *checke
 	}
 
 	if typeNode := parameter.Type(); typeNode != nil {
-		return checker.Checker_getTypeFromTypeNode(typeChecker, typeNode)
+		return typeChecker.GetTypeFromTypeNode(typeNode)
 	}
 
 	return typeChecker.GetTypeAtLocation(parameter)

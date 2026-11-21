@@ -20,8 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # required for git am --3way to work properly
-          submodules: true
+          fetch-depth: 1
+          submodules: false
           persist-credentials: false
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -37,8 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # required for git am --3way to work properly
-          submodules: true
+          fetch-depth: 1
+          submodules: false
           persist-credentials: false
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -61,8 +61,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # required for git am --3way to work properly
-          submodules: true
+          fetch-depth: 1
+          submodules: false
           persist-credentials: false
 
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
@@ -84,8 +84,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # required for git am --3way to work properly
-          submodules: true
+          fetch-depth: 1
+          submodules: false
           persist-credentials: false
 
       - uses: ./.github/actions/setup

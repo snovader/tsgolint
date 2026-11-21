@@ -3,9 +3,9 @@ package no_unsafe_type_assertion
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -51,7 +51,7 @@ func getAnyTypeName(t *checker.Type) string {
 }
 
 func isObjectLiteralType(t *checker.Type) bool {
-	return utils.IsObjectType(t) && checker.Type_objectFlags(t)&checker.ObjectFlagsObjectLiteral != 0
+	return utils.IsObjectType(t) && t.ObjectFlags()&checker.ObjectFlagsObjectLiteral != 0
 }
 
 func typeLabel(typeChecker *checker.Checker, t *checker.Type) string {
@@ -120,16 +120,16 @@ var NoUnsafeTypeAssertionRule = rule.Rule{
 			// won't fail on excess property check.
 			expressionWidenedType := expressionType
 			if isObjectLiteralType(expressionType) {
-				expressionWidenedType = checker.Checker_getWidenedType(ctx.TypeChecker, expressionType)
+				expressionWidenedType = ctx.TypeChecker.GetWidenedType(expressionType)
 			}
 
-			if checker.Checker_isTypeAssignableTo(ctx.TypeChecker, expressionWidenedType, assertedType) {
+			if ctx.TypeChecker.IsTypeAssignableTo(expressionWidenedType, assertedType) {
 				return
 			}
 
 			// Produce a more specific error message when targeting a type parameter
 			if utils.IsTypeParameter(assertedType) {
-				assertedTypeConstraint := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, assertedType)
+				assertedTypeConstraint := ctx.TypeChecker.GetBaseConstraintOfType(assertedType)
 				if assertedTypeConstraint == nil {
 					// asserting to an unconstrained type parameter is unsafe
 					report(buildUnsafeToUnconstrainedTypeAssertionMessage(ctx.TypeChecker.TypeToString(assertedType)))
@@ -138,7 +138,7 @@ var NoUnsafeTypeAssertionRule = rule.Rule{
 
 				// special case message if the original type is assignable to the
 				// constraint of the target type parameter
-				if checker.Checker_isTypeAssignableTo(ctx.TypeChecker, expressionWidenedType, assertedTypeConstraint) {
+				if ctx.TypeChecker.IsTypeAssignableTo(expressionWidenedType, assertedTypeConstraint) {
 					report(buildUnsafeTypeAssertionAssignableToConstraintMessage(ctx.TypeChecker.TypeToString(assertedType)))
 					return
 				}

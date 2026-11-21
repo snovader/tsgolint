@@ -7,10 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -135,12 +134,12 @@ func needsSpaceAfterIdentifier(sourceText string, memberExprEnd int) bool {
 // getRelevantDeclaration returns the property declaration whose visibility
 // modifiers should be consulted for the given element-access expression.
 func getRelevantDeclaration(symbol *ast.Symbol, accessNode *ast.Node) *ast.Node {
-	if symbol == nil || len(symbol.Declarations) == 0 {
+	if symbol == nil || len(symbol.Declarations()) == 0 {
 		return nil
 	}
 
 	var getter, setter *ast.Node
-	for _, declaration := range symbol.Declarations {
+	for _, declaration := range symbol.Declarations() {
 		switch {
 		case getter == nil && ast.IsGetAccessorDeclaration(declaration):
 			getter = declaration
@@ -150,7 +149,7 @@ func getRelevantDeclaration(symbol *ast.Symbol, accessNode *ast.Node) *ast.Node 
 	}
 
 	if getter == nil && setter == nil {
-		return symbol.Declarations[0]
+		return symbol.Declarations()[0]
 	}
 
 	// For a get/set accessor pair, consult the accessor actually involved in the
@@ -286,8 +285,8 @@ var DotNotationRule = rule.Rule{
 			if propertySymbol == nil && hasStaticPropertyName {
 				objectType := utils.GetNonNullableType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(node.Expression()))
 				if objectType != nil {
-					for _, candidate := range checker.Checker_getPropertiesOfType(ctx.TypeChecker, objectType) {
-						if candidate.Name == propertyName {
+					for _, candidate := range ctx.TypeChecker.GetPropertiesOfType(objectType) {
+						if candidate.Name() == propertyName {
 							propertySymbol = candidate
 							break
 						}
@@ -308,18 +307,18 @@ var DotNotationRule = rule.Rule{
 				}
 			}
 
-			if (propertySymbol == nil || len(propertySymbol.Declarations) == 0) && allowIndexSignaturePropertyAccess {
+			if (propertySymbol == nil || len(propertySymbol.Declarations()) == 0) && allowIndexSignaturePropertyAccess {
 				if ctx.Program.Options().NoPropertyAccessFromIndexSignature.IsTrue() {
 					return true
 				}
 
 				objectType := utils.GetNonNullableType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(node.Expression()))
 				if objectType != nil {
-					objectType = checker.Checker_getApparentType(ctx.TypeChecker, objectType)
+					objectType = ctx.TypeChecker.GetApparentType(objectType)
 					keyType := ctx.TypeChecker.GetTypeAtLocation(property)
-					baseKeyType := checker.Checker_getBaseTypeOfLiteralType(ctx.TypeChecker, keyType)
-					if checker.Checker_getIndexTypeOfType(ctx.TypeChecker, objectType, keyType) != nil ||
-						(baseKeyType != nil && checker.Checker_getIndexTypeOfType(ctx.TypeChecker, objectType, baseKeyType) != nil) {
+					baseKeyType := ctx.TypeChecker.GetBaseTypeOfLiteralType(keyType)
+					if ctx.TypeChecker.GetIndexTypeOfType(objectType, keyType) != nil ||
+						(baseKeyType != nil && ctx.TypeChecker.GetIndexTypeOfType(objectType, baseKeyType) != nil) {
 						return true
 					}
 				}

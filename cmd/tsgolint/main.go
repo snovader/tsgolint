@@ -84,12 +84,11 @@ import (
 	"github.com/typescript-eslint/tsgolint/internal/rules/unbound_method"
 	"github.com/typescript-eslint/tsgolint/internal/rules/use_unknown_in_catch_callback_variable"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/bundled"
-	"github.com/microsoft/typescript-go/shim/scanner"
-	"github.com/microsoft/typescript-go/shim/tspath"
-	"github.com/microsoft/typescript-go/shim/vfs/cachedvfs"
-	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/bundled"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/cachedvfs"
 )
 
 func recordTrace(traceOut string) (func(), error) {
@@ -237,7 +236,7 @@ func init() {
 
 const spaces = "                                                                                                    "
 
-func printDiagnostic(d rule.RuleDiagnostic, w *bufio.Writer, comparePathOptions tspath.ComparePathsOptions) {
+func printDiagnostic(d rule.RuleDiagnostic, w *bufio.Writer, currentDirectory tspath.RootedDirectoryPath, sensitivity tspath.CaseSensitivity) {
 	diagnosticStart := d.Range.Pos()
 	diagnosticEnd := d.Range.End()
 
@@ -269,7 +268,7 @@ func printDiagnostic(d rule.RuleDiagnostic, w *bufio.Writer, comparePathOptions 
 		w.WriteString(d.Message.Description[messageLineStart:len(d.Message.Description)])
 	}
 	w.WriteString("\n  \x1b[2m╭─┴──────────(\x1b[0m \x1b[3m\x1b[38;5;117m")
-	w.WriteString(tspath.ConvertToRelativePath(d.SourceFile.FileName(), comparePathOptions))
+	w.WriteString(tspath.ConvertToRelativePath(d.SourceFile.FileName().AsString(), currentDirectory, sensitivity))
 	w.WriteByte(':')
 	w.WriteString(strconv.Itoa(diagnosticStartLine + 1))
 	w.WriteByte(':')
@@ -499,18 +498,18 @@ func runMain() int {
 	}
 	currentDirectory = tspath.NormalizePath(currentDirectory)
 
-	fs := bundled.WrapFS(cachedvfs.From(osvfs.FS()))
+	fs := bundled.WrapFS(cachedvfs.From(createFileSystem(currentDirectory)))
 	var configFileName string
 	if tsconfig == "" {
 		configFileName = tspath.ResolvePath(currentDirectory, "tsconfig.json")
-		if !fs.FileExists(configFileName) {
+		if !fs.FileExists(tspath.RootedFilePathFromAbsolute(configFileName)) {
 			fs = utils.NewOverlayVFS(fs, map[string]string{
 				configFileName: "{}",
 			})
 		}
 	} else {
 		configFileName = tspath.ResolvePath(currentDirectory, tsconfig)
-		if !fs.FileExists(configFileName) {
+		if !fs.FileExists(tspath.RootedFilePathFromAbsolute(configFileName)) {
 			fmt.Fprintf(os.Stderr, "error: tsconfig %q doesn't exist", tsconfig)
 			return 1
 		}
@@ -519,11 +518,6 @@ func runMain() int {
 	currentDirectory = tspath.GetDirectoryPath(configFileName)
 
 	host := utils.CreateCompilerHost(currentDirectory, fs)
-
-	comparePathOptions := tspath.ComparePathsOptions{
-		CurrentDirectory:          host.GetCurrentDirectory(),
-		UseCaseSensitiveFileNames: host.FS().UseCaseSensitiveFileNames(),
-	}
 
 	program, _, err := utils.CreateProgram(singleThreaded, fs, currentDirectory, configFileName, host, false)
 	if err != nil {
@@ -537,10 +531,10 @@ func runMain() int {
 	}
 
 	files := []*ast.SourceFile{}
-	cwdPath := string(tspath.ToPath("", currentDirectory, program.Host().FS().UseCaseSensitiveFileNames()).EnsureTrailingDirectorySeparator())
+	cwdPath := tspath.EnsureTrailingDirectorySeparator(program.Host().FS().CaseSensitivity().Canonicalize(currentDirectory))
 	var matchedFiles strings.Builder
 	for _, file := range program.SourceFiles() {
-		p := string(file.Path())
+		p := string(file.PathKey())
 		if strings.Contains(p, "/node_modules/") {
 			continue
 		}
@@ -573,7 +567,7 @@ func runMain() int {
 			if errorsCount == 1 {
 				w.WriteByte('\n')
 			}
-			printDiagnostic(d, w, comparePathOptions)
+			printDiagnostic(d, w, tspath.RootedDirectoryPathFromAbsolute(currentDirectory), fs.CaseSensitivity())
 			if w.Available() < 4096 {
 				w.Flush()
 			}

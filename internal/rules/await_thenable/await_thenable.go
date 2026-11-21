@@ -3,10 +3,10 @@ package await_thenable
 import (
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -331,15 +331,15 @@ func getValueTypesOfArrayLike(
 	t *checker.Type,
 ) []*checker.Type {
 	if checker.IsTupleType(t) {
-		return checker.Checker_getTypeArguments(typeChecker, t)
+		return typeChecker.GetTypeArguments(t)
 	}
 
 	if numberIndexType := utils.GetNumberIndexType(typeChecker, t); numberIndexType != nil {
 		return []*checker.Type{numberIndexType}
 	}
 
-	if checker.Type_objectFlags(t)&checker.ObjectFlagsReference != 0 {
-		typeArguments := checker.Checker_getTypeArguments(typeChecker, t)
+	if t.ObjectFlags()&checker.ObjectFlagsReference != 0 {
+		typeArguments := typeChecker.GetTypeArguments(t)
 		if len(typeArguments) != 0 {
 			return typeArguments[:1]
 		}

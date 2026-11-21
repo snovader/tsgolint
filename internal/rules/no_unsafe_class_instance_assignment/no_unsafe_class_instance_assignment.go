@@ -3,8 +3,8 @@ package no_unsafe_class_instance_assignment
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -28,7 +28,7 @@ type classInstanceChecker struct {
 }
 
 func isTypeReference(t *checker.Type) bool {
-	return utils.IsObjectType(t) && checker.Type_objectFlags(t)&checker.ObjectFlagsReference != 0
+	return utils.IsObjectType(t) && t.ObjectFlags()&checker.ObjectFlagsReference != 0
 }
 
 func getClassTarget(t *checker.Type) *checker.Type {
@@ -41,7 +41,7 @@ func getClassTarget(t *checker.Type) *checker.Type {
 		target = t.Target()
 	}
 
-	if checker.Type_objectFlags(target)&checker.ObjectFlagsClass != 0 {
+	if target.ObjectFlags()&checker.ObjectFlagsClass != 0 {
 		return target
 	}
 	return nil
@@ -113,7 +113,7 @@ func (c *classInstanceChecker) isInstanceOf(source *checker.Type, classType *che
 	classTarget := getClassTarget(classType)
 
 	for _, part := range utils.IntersectionTypeParts(source) {
-		if utils.IsObjectType(part) && checker.Type_objectFlags(part)&checker.ObjectFlagsMapped != 0 {
+		if utils.IsObjectType(part) && part.ObjectFlags()&checker.ObjectFlagsMapped != 0 {
 			return true
 		}
 		if utils.MatchesTypeOrBaseType(c.typeChecker, part, func(t *checker.Type) bool {

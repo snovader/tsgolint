@@ -3,11 +3,11 @@ package utils
 import (
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 )
 
 type ConstraintTypeInfo struct {
@@ -39,8 +39,8 @@ func GetConstraintInfo(
 	typeChecker *checker.Checker,
 	t *checker.Type,
 ) (constraintType *checker.Type, isTypeParameter bool) {
-	if checker.Type_flags(t)&checker.TypeFlagsTypeParameter != 0 {
-		return checker.Checker_getBaseConstraintOfType(typeChecker, t), true
+	if t.Flags()&checker.TypeFlagsTypeParameter != 0 {
+		return typeChecker.GetBaseConstraintOfType(t), true
 	}
 	return t, false
 }
@@ -82,7 +82,7 @@ func NeedsToBeAwaited(
 func GetConstrainedTypeAtLocation(typeChecker *checker.Checker, node *ast.Node) *checker.Type {
 	nodeType := typeChecker.GetTypeAtLocation(node)
 
-	constraint := checker.Checker_getBaseConstraintOfType(typeChecker, nodeType)
+	constraint := typeChecker.GetBaseConstraintOfType(nodeType)
 	if constraint != nil {
 		return constraint
 	}
@@ -100,7 +100,7 @@ func GetTypeName(
 	t *checker.Type,
 ) string {
 	// It handles `string` and string literal types as string.
-	if checker.Type_flags(t)&checker.TypeFlagsStringLike != 0 {
+	if t.Flags()&checker.TypeFlagsStringLike != 0 {
 		return "string"
 	}
 
@@ -111,13 +111,13 @@ func GetTypeName(
 		// `type.getConstraint()` method doesn't return the constraint type of
 		// the type parameter for some reason. So this gets the constraint type
 		// via AST.
-		symbol := checker.Type_symbol(t)
-		decls := symbol.Declarations
+		symbol := t.Symbol()
+		decls := symbol.Declarations()
 		if decls != nil && len(decls) > 0 {
 			if ast.IsTypeParameterDeclaration(decls[0]) {
 				typeParamDecl := decls[0].AsTypeParameterDeclaration()
 				if typeParamDecl.Constraint != nil {
-					return GetTypeName(typeChecker, checker.Checker_getTypeFromTypeNode(typeChecker, typeParamDecl.Constraint))
+					return GetTypeName(typeChecker, typeChecker.GetTypeFromTypeNode(typeParamDecl.Constraint))
 				}
 			}
 		}
@@ -258,8 +258,8 @@ func GetDeclaration(
 	if symbol == nil {
 		return nil
 	}
-	if len(symbol.Declarations) > 0 {
-		return symbol.Declarations[0]
+	if len(symbol.Declarations()) > 0 {
+		return symbol.Declarations()[0]
 	}
 	return nil
 }
@@ -271,8 +271,8 @@ func IsTypeAnyArrayType(
 	t *checker.Type,
 	typeChecker *checker.Checker,
 ) bool {
-	return checker.Checker_isArrayType(typeChecker, t) &&
-		IsTypeAnyType(checker.Checker_getTypeArguments(typeChecker, t)[0])
+	return typeChecker.IsArrayType(t) &&
+		IsTypeAnyType(typeChecker.GetTypeArguments(t)[0])
 }
 
 /**
@@ -282,8 +282,8 @@ func IsTypeUnknownArrayType(
 	t *checker.Type,
 	typeChecker *checker.Checker,
 ) bool {
-	return checker.Checker_isArrayType(typeChecker, t) &&
-		IsTypeUnknownType(checker.Checker_getTypeArguments(typeChecker, t)[0])
+	return typeChecker.IsArrayType(t) &&
+		IsTypeUnknownType(typeChecker.GetTypeArguments(t)[0])
 }
 
 /**
@@ -367,11 +367,11 @@ func isUnsafeAssignmentWorker(
 			return nil, nil, false
 		}
 
-		typeArguments := checker.Checker_getTypeArguments(typeChecker, t)
+		typeArguments := typeChecker.GetTypeArguments(t)
 		if typeArguments == nil {
 			return nil, nil, false
 		}
-		receiverTypeArguments := checker.Checker_getTypeArguments(typeChecker, receiver)
+		receiverTypeArguments := typeChecker.GetTypeArguments(receiver)
 		if receiverTypeArguments == nil {
 			return nil, nil, false
 		}
@@ -409,7 +409,7 @@ func GetContextualType(
 		}
 	} else if ast.IsVariableDeclaration(parent) || ast.IsPropertyDeclaration(parent) || ast.IsParameterDeclaration(parent) {
 		if t := parent.Type(); t != nil {
-			return checker.Checker_getTypeFromTypeNode(typeChecker, t)
+			return typeChecker.GetTypeFromTypeNode(t)
 		}
 		return nil
 	} else if parent.Kind == ast.KindJsxExpression {
@@ -457,13 +457,13 @@ func GetThisExpression(
  * - `Fruit.Apple` --> `Fruit`
  */
 func getBaseEnumType(typeChecker *checker.Checker, t *checker.Type) *checker.Type {
-	symbol := checker.Type_symbol(t)
+	symbol := t.Symbol()
 	if !IsSymbolFlagSet(symbol, ast.SymbolFlagsEnumMember) {
 		return t
 	}
 
 	return typeChecker.GetTypeAtLocation(
-		symbol.ValueDeclaration.Parent,
+		symbol.ValueDeclaration().Parent,
 	)
 }
 
@@ -546,7 +546,7 @@ func discriminateAnyTypeWorker(
 		if !IsThenableType(typeChecker, node, t) {
 			return false
 		}
-		awaitedType := checker.Checker_getAwaitedType(typeChecker, t)
+		awaitedType := typeChecker.GetAwaitedType(t)
 		if awaitedType == nil {
 			return false
 		}

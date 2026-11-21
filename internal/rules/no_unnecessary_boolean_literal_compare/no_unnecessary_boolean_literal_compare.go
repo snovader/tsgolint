@@ -3,9 +3,9 @@ package no_unnecessary_boolean_literal_compare
 import (
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -115,7 +115,7 @@ var NoUnnecessaryBooleanLiteralCompareRule = rule.Rule{
 
 			var flags checker.TypeFlags
 			for _, t := range t.Types() {
-				flags |= checker.Type_flags(t)
+				flags |= t.Flags()
 			}
 			return flags&checker.TypeFlagsNullable != 0 && flags&checker.TypeFlagsBooleanLike != 0
 		}

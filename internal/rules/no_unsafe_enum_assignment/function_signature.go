@@ -1,8 +1,8 @@
 package no_unsafe_enum_assignment
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
 
@@ -20,10 +20,10 @@ func newFunctionSignature(c *enumTypeChecker, node *ast.Node) *functionSignature
 		return nil
 	}
 	result := &functionSignature{}
-	for i, parameter := range checker.Signature_parameters(signature) {
+	for i, parameter := range signature.Parameters() {
 		t := c.checker.GetTypeOfSymbolAtLocation(parameter, node)
 		constrained := c.constraint(t)
-		if len(parameter.Declarations) > 0 && utils.IsRestParameterDeclaration(parameter.Declarations[0]) {
+		if len(parameter.Declarations()) > 0 && utils.IsRestParameterDeclaration(parameter.Declarations()[0]) {
 			result.restIndex = i
 			if checker.IsTupleType(constrained) {
 				result.rest = c.typeArguments(constrained)

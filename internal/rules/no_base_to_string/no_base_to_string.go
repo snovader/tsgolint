@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -163,7 +163,7 @@ var NoBaseToStringRule = rule.Rule{
 			t *checker.Type,
 			visited []*checker.Type,
 		) usefulness {
-			typeArgs := checker.Checker_getTypeArguments(ctx.TypeChecker, t)
+			typeArgs := ctx.TypeChecker.GetTypeArguments(t)
 			hasNever, hasSometimes := false, false
 			for _, typeArg := range typeArgs {
 				certainty := collectToStringCertainty(typeArg, visited)
@@ -214,7 +214,7 @@ var NoBaseToStringRule = rule.Rule{
 					return collectTupleCertainty(t, visited)
 				}
 
-				if checker.Checker_isArrayType(ctx.TypeChecker, t) {
+				if ctx.TypeChecker.IsArrayType(t) {
 					return collectArrayCertainty(t, visited)
 				}
 
@@ -233,7 +233,7 @@ var NoBaseToStringRule = rule.Rule{
 
 			return toStringMemo.get(t, func() usefulness {
 				if utils.IsTypeParameter(t) {
-					constraint := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, t)
+					constraint := ctx.TypeChecker.GetBaseConstraintOfType(t)
 					if constraint != nil {
 						return collectToStringCertainty(constraint, visited)
 					}
@@ -271,18 +271,18 @@ var NoBaseToStringRule = rule.Rule{
 					return collectTupleCertainty(t, append(visited, t))
 				}
 
-				if checker.Checker_isArrayType(ctx.TypeChecker, t) {
+				if ctx.TypeChecker.IsArrayType(t) {
 					return collectArrayCertainty(t, append(visited, t))
 				}
 
 				foundFallbackOnObject := false
 				for _, propertyName := range []string{"toString", "toLocaleString", "valueOf"} {
-					property := checker.Checker_getPropertyOfType(ctx.TypeChecker, t, propertyName)
+					property := ctx.TypeChecker.GetPropertyOfType(t, propertyName)
 					if property == nil {
 						continue
 					}
 
-					declarations := property.Declarations
+					declarations := property.Declarations()
 					if len(declarations) == 0 {
 						continue
 					}

@@ -1,10 +1,10 @@
 package no_misused_spread
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -88,7 +88,7 @@ func isPromise(program *compiler.Program, typeChecker *checker.Checker, t *check
 
 func isFunctionWithoutProps(typeChecker *checker.Checker, t *checker.Type) bool {
 	return utils.TypeRecurser(t, func(t *checker.Type) bool {
-		return len(utils.GetCallSignatures(typeChecker, t)) != 0 && len(checker.Checker_getPropertiesOfType(typeChecker, t)) == 0
+		return len(utils.GetCallSignatures(typeChecker, t)) != 0 && len(typeChecker.GetPropertiesOfType(t)) == 0
 	})
 }
 
@@ -125,13 +125,13 @@ func isClassInstance(typeChecker *checker.Checker, t *checker.Type) bool {
 			return false
 		}
 
-		symbol := checker.Type_symbol(t)
-		if symbol == nil || symbol.Declarations == nil {
+		symbol := t.Symbol()
+		if symbol == nil || symbol.Declarations() == nil {
 			return false
 		}
 
 		// If the type's symbol has a construct signature, the type is an instance
-		for _, decl := range symbol.Declarations {
+		for _, decl := range symbol.Declarations() {
 			if len(utils.GetConstructSignatures(typeChecker, typeChecker.GetTypeOfSymbolAtLocation(symbol, decl))) != 0 {
 				return true
 			}
@@ -142,12 +142,12 @@ func isClassInstance(typeChecker *checker.Checker, t *checker.Type) bool {
 
 func isClassDeclaration(t *checker.Type) bool {
 	return utils.TypeRecurser(t, func(t *checker.Type) bool {
-		if utils.IsObjectType(t) && checker.Type_objectFlags(t)&checker.ObjectFlagsInstantiationExpressionType != 0 {
+		if utils.IsObjectType(t) && t.ObjectFlags()&checker.ObjectFlagsInstantiationExpressionType != 0 {
 			return true
 		}
 
-		symbol := checker.Type_symbol(t)
-		return symbol != nil && symbol.ValueDeclaration != nil && (ast.IsClassExpression(symbol.ValueDeclaration) || ast.IsClassDeclaration(symbol.ValueDeclaration))
+		symbol := t.Symbol()
+		return symbol != nil && symbol.ValueDeclaration() != nil && (ast.IsClassExpression(symbol.ValueDeclaration()) || ast.IsClassDeclaration(symbol.ValueDeclaration()))
 	})
 }
 

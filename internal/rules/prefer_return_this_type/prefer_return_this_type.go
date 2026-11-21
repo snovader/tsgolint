@@ -1,8 +1,7 @@
 package prefer_return_this_type
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 )
 
@@ -86,7 +85,7 @@ var PreferReturnThisTypeRule = rule.Rule{
 						return true
 					}
 
-					if checker.InterfaceType_thisType(classType) == t {
+					if classType.ThisType() == t {
 						hasReturnThis = true
 					}
 					return false
@@ -100,7 +99,7 @@ var PreferReturnThisTypeRule = rule.Rule{
 					return
 				}
 				t := ctx.TypeChecker.GetTypeAtLocation(body)
-				if checker.InterfaceType_thisType(classType) != t {
+				if classType.ThisType() != t {
 					return
 				}
 			}

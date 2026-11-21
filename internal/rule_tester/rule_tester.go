@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/go-json-experiment/json"
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/bundled"
-	"github.com/microsoft/typescript-go/shim/scanner"
-	"github.com/microsoft/typescript-go/shim/tspath"
-	"github.com/microsoft/typescript-go/shim/vfs/cachedvfs"
-	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/bundled"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/cachedvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/osvfs"
 	"github.com/typescript-eslint/tsgolint/internal/diagnostic"
 	"github.com/typescript-eslint/tsgolint/internal/linter"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
@@ -97,14 +97,11 @@ func RunRuleTester(rootDir string, tsconfigPath string, t *testing.T, r *rule.Ru
 		}
 		assert.Assert(t, program != nil, "couldn't create program")
 
-		sourceFile := program.GetSourceFile(fileName)
-		if sourceFile == nil {
-			sourceFile = program.GetSourceFile(resolvedFileName)
-		}
+		sourceFile := program.GetSourceFile(tspath.RootedFilePathFromAbsolute(resolvedFileName))
 		if sourceFile == nil {
 			programFiles := make([]string, 0, len(program.SourceFiles()))
 			for _, sf := range program.SourceFiles() {
-				programFiles = append(programFiles, sf.FileName())
+				programFiles = append(programFiles, sf.FileName().AsString())
 			}
 			slices.Sort(programFiles)
 			assert.Assert(t, false, "couldn't get source file: "+fileName+" (resolved: "+resolvedFileName+"). program source files ("+strconv.Itoa(len(programFiles))+"): "+strings.Join(programFiles, ", "))

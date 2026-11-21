@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -154,7 +154,7 @@ var NoRedundantTypeConstituentsRule = rule.Rule{
 			t := ctx.TypeChecker.GetTypeAtLocation(node)
 
 			var typeParts []*checker.Type
-			if t == checker.Checker_booleanType(ctx.TypeChecker) {
+			if t == ctx.TypeChecker.GetBooleanType() {
 				typeParts = []*checker.Type{t}
 			} else {
 				typeParts = utils.UnionTypeParts(t)
@@ -163,7 +163,7 @@ var NoRedundantTypeConstituentsRule = rule.Rule{
 			res := make([]typeFlagsWithNodeOrType, len(typeParts))
 			for i, part := range typeParts {
 				res[i] = typeFlagsWithNodeOrType{
-					flags: checker.Type_flags(part),
+					flags: part.Flags(),
 					t:     part,
 				}
 			}

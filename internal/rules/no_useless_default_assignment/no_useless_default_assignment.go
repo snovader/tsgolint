@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -96,7 +96,7 @@ func getPropertyName(node *ast.Node) (string, bool) {
 
 func getArrayElementType(typeChecker *checker.Checker, arrayType *checker.Type, elementIndex int) *checker.Type {
 	if checker.IsTupleType(arrayType) {
-		tupleArgs := checker.Checker_getTypeArguments(typeChecker, arrayType)
+		tupleArgs := typeChecker.GetTypeArguments(arrayType)
 		if elementIndex >= 0 && elementIndex < len(tupleArgs) {
 			return tupleArgs[elementIndex]
 		}
@@ -154,8 +154,8 @@ func isSimpleTypeForMessage(t *checker.Type) bool {
 		return true
 	}
 
-	symbol := checker.Type_symbol(t)
-	return symbol != nil && symbol.Name != ""
+	symbol := t.Symbol()
+	return symbol != nil && symbol.Name() != ""
 }
 
 func getPluralAssignmentType(assignmentType string) string {
@@ -250,7 +250,7 @@ var NoUselessDefaultAssignmentRule = rule.Rule{
 					return nil
 				}
 
-				symbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, sourceType, propertyName)
+				symbol := ctx.TypeChecker.GetPropertyOfType(sourceType, propertyName)
 				if symbol == nil {
 					return nil
 				}
@@ -316,12 +316,12 @@ var NoUselessDefaultAssignmentRule = rule.Rule{
 					}
 				}
 
-				parameters := checker.Signature_parameters(signature)
+				parameters := signature.Parameters()
 				if paramIndex < 0 || paramIndex >= len(parameters) {
 					return nil
 				}
 
-				return checker.Checker_getTypeOfSymbol(ctx.TypeChecker, parameters[paramIndex])
+				return ctx.TypeChecker.GetTypeOfSymbol(parameters[paramIndex])
 			}
 
 			if ast.IsBindingElement(parent) {
@@ -445,11 +445,11 @@ var NoUselessDefaultAssignmentRule = rule.Rule{
 			}
 
 			signatures := utils.GetCallSignatures(ctx.TypeChecker, contextualType)
-			if len(signatures) == 0 || checker.Signature_declaration(signatures[0]) == parent {
+			if len(signatures) == 0 || signatures[0].Declaration() == parent {
 				return
 			}
 
-			parameters := checker.Signature_parameters(signatures[0])
+			parameters := signatures[0].Parameters()
 			if paramIndex >= len(parameters) {
 				return
 			}
@@ -459,12 +459,12 @@ var NoUselessDefaultAssignmentRule = rule.Rule{
 				return
 			}
 
-			if paramSymbol.ValueDeclaration != nil && ast.IsParameterDeclaration(paramSymbol.ValueDeclaration) && paramSymbol.ValueDeclaration.AsParameterDeclaration().DotDotDotToken != nil {
+			if paramSymbol.ValueDeclaration() != nil && ast.IsParameterDeclaration(paramSymbol.ValueDeclaration()) && paramSymbol.ValueDeclaration().AsParameterDeclaration().DotDotDotToken != nil {
 				return
 			}
 
 			if !utils.IsSymbolFlagSet(paramSymbol, ast.SymbolFlagsOptional) {
-				paramType := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, paramSymbol)
+				paramType := ctx.TypeChecker.GetTypeOfSymbol(paramSymbol)
 				if !utils.IsTypeParameter(paramType) && !canBeUndefined(paramType) {
 					reportUselessDefaultAssignment(node, "parameter", paramType)
 				}
@@ -481,7 +481,7 @@ var NoUselessDefaultAssignmentRule = rule.Rule{
 			if utils.IsUndefinedIdentifier(initializer) {
 				if ast.IsParameterDeclaration(node) {
 					parameter := node.AsParameterDeclaration()
-					if parameter.Type != nil && canBeUndefined(checker.Checker_getTypeFromTypeNode(ctx.TypeChecker, parameter.Type)) {
+					if parameter.Type != nil && canBeUndefined(ctx.TypeChecker.GetTypeFromTypeNode(parameter.Type)) {
 						reportPreferOptionalSyntax(node)
 						return
 					}
@@ -517,14 +517,14 @@ var NoUselessDefaultAssignmentRule = rule.Rule{
 					return
 				}
 
-				tupleArgs := checker.Checker_getTypeArguments(ctx.TypeChecker, sourceType)
+				tupleArgs := ctx.TypeChecker.GetTypeArguments(sourceType)
 				elementIndex := findNodeIndex(parent.AsBindingPattern().Elements.Nodes, node)
 				if elementIndex < 0 || elementIndex >= len(tupleArgs) {
 					return
 				}
 
 				tupleTarget := sourceType.Target().AsTupleType()
-				if elementIndex >= checker.TupleType_minLength(tupleTarget) {
+				if elementIndex >= tupleTarget.MinLength() {
 					return
 				}
 

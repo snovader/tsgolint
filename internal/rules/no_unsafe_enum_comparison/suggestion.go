@@ -3,11 +3,11 @@ package no_unsafe_enum_comparison
 import (
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/jsnum"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/jsnum"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -97,7 +97,7 @@ func enumQualifierFromType(typeChecker *checker.Checker, atNode *ast.Node, enumT
 
 	enumSymbol := typeChecker.GetSymbolAtLocation(enumDeclaration.AsEnumDeclaration().Name())
 	for _, scopeSymbol := range typeChecker.GetSymbolsInScope(atNode, ast.SymbolFlagsValue) {
-		if scopeSymbol.Name == qualifier && symbolMatchesEnum(typeChecker, scopeSymbol, enumSymbol) {
+		if scopeSymbol.Name() == qualifier && symbolMatchesEnum(typeChecker, scopeSymbol, enumSymbol) {
 			return qualifier
 		}
 	}
@@ -143,7 +143,7 @@ func symbolMatchesEnumDeclaration(typeChecker *checker.Checker, symbol *ast.Symb
 		symbol = typeChecker.GetAliasedSymbol(symbol)
 	}
 	symbol = typeChecker.GetExportSymbolOfSymbol(symbol)
-	return symbol != nil && symbol.ValueDeclaration != nil && ast.IsEnumMember(symbol.ValueDeclaration) && symbol.ValueDeclaration.Parent == enumDeclaration
+	return symbol != nil && symbol.ValueDeclaration() != nil && ast.IsEnumMember(symbol.ValueDeclaration()) && symbol.ValueDeclaration().Parent == enumDeclaration
 }
 
 func enumQualifierFromMemberAccess(sourceFile *ast.SourceFile, typeChecker *checker.Checker, node *ast.Node, enumDeclaration *ast.Node) string {
@@ -177,22 +177,22 @@ func enumQualifierFromMemberAccess(sourceFile *ast.SourceFile, typeChecker *chec
 
 func getEnumKeyForLiteral(sourceFile *ast.SourceFile, typeChecker *checker.Checker, atNode *ast.Node, enumSideNode *ast.Node, enumLiterals []*checker.Type, value staticValue) string {
 	for _, enumLiteral := range enumLiterals {
-		symbol := checker.Type_symbol(enumLiteral)
-		if symbol == nil || symbol.ValueDeclaration == nil || !ast.IsEnumMember(symbol.ValueDeclaration) {
+		symbol := enumLiteral.Symbol()
+		if symbol == nil || symbol.ValueDeclaration() == nil || !ast.IsEnumMember(symbol.ValueDeclaration()) {
 			continue
 		}
 
-		enumValue := typeChecker.GetConstantValue(symbol.ValueDeclaration)
+		enumValue := typeChecker.GetConstantValue(symbol.ValueDeclaration())
 		if !enumValueMatchesStaticValue(enumValue, value) {
 			continue
 		}
 
-		suffix := enumMemberSuffixText(sourceFile, symbol.ValueDeclaration)
+		suffix := enumMemberSuffixText(sourceFile, symbol.ValueDeclaration())
 		if suffix == "" {
 			continue
 		}
 
-		enumDeclaration := symbol.ValueDeclaration.Parent
+		enumDeclaration := symbol.ValueDeclaration().Parent
 		qualifier := enumQualifierFromMemberAccess(sourceFile, typeChecker, enumSideNode, enumDeclaration)
 		if qualifier == "" {
 			qualifier = enumQualifierFromType(typeChecker, atNode, typeChecker.GetTypeAtLocation(enumDeclaration), enumDeclaration)

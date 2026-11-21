@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -83,10 +83,10 @@ var RestrictPlusOperandsRule = rule.Rule{
 		}
 
 		getTypeConstrained := func(node *ast.Node) *checker.Type {
-			return checker.Checker_getBaseTypeOfLiteralType(ctx.TypeChecker, utils.GetConstrainedTypeAtLocation(ctx.TypeChecker, node))
+			return ctx.TypeChecker.GetBaseTypeOfLiteralType(utils.GetConstrainedTypeAtLocation(ctx.TypeChecker, node))
 		}
 
-		globalRegexpType := checker.Checker_globalRegExpType(ctx.TypeChecker)
+		globalRegexpType := ctx.TypeChecker.GetGlobalRegExpType()
 
 		invalidFlags := checker.TypeFlagsESSymbolLike |
 			checker.TypeFlagsNever |
@@ -107,7 +107,7 @@ var RestrictPlusOperandsRule = rule.Rule{
 			var flags checker.TypeFlags
 
 			for _, part := range utils.UnionTypeParts(baseType) {
-				flags |= checker.Type_flags(part)
+				flags |= part.Flags()
 				if utils.IsTypeFlagSet(part, invalidFlags) {
 					return flags, true
 				}

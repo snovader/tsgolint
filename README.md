@@ -13,6 +13,12 @@
 
 High-performance **type-aware linting** for Oxlint.
 
+This fork builds against the PnP-enabled compiler pinned in `compiler-source.json`.
+Run `just init` to prepare its checkout in the sibling `../typescript` directory
+and synchronize compiler collections, then `just shim` and `just build`.
+The setup script refuses to replace a compiler checkout with local changes.
+Compiler updates require changing the pin and regenerating the shims together.
+
 `tsgolint` executes lint rules that require **TypeScript semantic analysis**, using [typescript-go](https://github.com/microsoft/typescript-go) for full compatibility with the TypeScript type system, and targets **TypeScript 7** (codenamed **Project Corsa**).
 
 It is designed to integrate seamlessly with Oxlint's fast syntax linting, enabling projects to run deeper semantic checks without sacrificing performance.

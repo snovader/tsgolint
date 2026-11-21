@@ -3,10 +3,9 @@ package utils
 import (
 	"testing"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
 	"github.com/typescript-eslint/tsgolint/internal/rules/fixtures"
 	"gotest.tools/v3/assert"
 )
@@ -20,11 +19,11 @@ func TestIsSymbolFromDefaultLibrary(t *testing.T) {
 
 		program, _, err := CreateProgram(true, fs, rootDir, "tsconfig.minimal.json", CreateCompilerHost(rootDir, fs), false)
 		assert.NilError(t, err, "couldn't create program")
-		sourceFile := program.GetSourceFile(filePath)
+		sourceFile := program.GetSourceFile(tspath.RootedFilePathFromAbsolute(filePath))
 		c, done := program.GetTypeChecker(t.Context())
 		defer done()
 		t := c.GetTypeAtLocation(sourceFile.Statements.Nodes[0].AsTypeAliasDeclaration().Name())
-		return program, checker.Type_symbol(t)
+		return program, t.Symbol()
 	}
 
 	runTestForAliasDeclaration := func(code string, expected bool) {

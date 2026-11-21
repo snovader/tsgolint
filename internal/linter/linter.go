@@ -12,13 +12,13 @@ import (
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/bundled"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/tspath"
-	"github.com/microsoft/typescript-go/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/bundled"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
 )
 
 type ConfiguredRule struct {
@@ -111,16 +111,16 @@ func RunLinter(options RunLinterOptions) error {
 			log.Printf("Program created with %d source files", len(program.GetSourceFiles()))
 		}
 
-		fileSet := make(map[tspath.Path]string, len(filePaths))
+		fileSet := make(map[tspath.PathKey]string, len(filePaths))
 		for _, f := range filePaths {
-			fileSet[tspath.ToPath(f, currentDirectory, fs.UseCaseSensitiveFileNames())] = f
+			fileSet[fs.CaseSensitivity().PathKey(tspath.ToRootedFilePath(f, tspath.RootedDirectoryPathFromAbsolute(currentDirectory)).AsPath())] = f
 		}
 
 		sourceFiles := make([]*ast.SourceFile, 0, len(filePaths))
 		for _, sf := range program.SourceFiles() {
-			if _, ok := fileSet[sf.Path()]; ok {
+			if _, ok := fileSet[sf.PathKey()]; ok {
 				sourceFiles = append(sourceFiles, sf)
-				delete(fileSet, sf.Path())
+				delete(fileSet, sf.PathKey())
 			}
 		}
 
@@ -134,7 +134,7 @@ func RunLinter(options RunLinterOptions) error {
 
 			var programFiles []string
 			for _, k := range program.SourceFiles() {
-				programFiles = append(programFiles, k.FileName())
+				programFiles = append(programFiles, k.FileName().AsString())
 			}
 			log.Printf("Program source files (%d): %s", len(programFiles), strings.Join(programFiles, ", "))
 
@@ -176,7 +176,7 @@ func RunLinter(options RunLinterOptions) error {
 
 		files := make([]*ast.SourceFile, 0, len(workload.UnmatchedFiles))
 		for _, f := range workload.UnmatchedFiles {
-			sf := program.GetSourceFile(f)
+			sf := program.GetSourceFile(tspath.ToRootedFilePath(f, tspath.RootedDirectoryPathFromAbsolute(currentDirectory)))
 			if sf == nil {
 				panic(fmt.Sprintf("Expected file '%s' to be in inferred program", f))
 			}
@@ -309,14 +309,14 @@ func newRuleContext(ctxBuilder *ruleContextBuilder) rule.RuleContext {
 func reportTypeScriptDiagnostics(program *compiler.Program, files []*ast.SourceFile, typeErrors TypeErrors, onInternalDiagnostic func(d diagnostic.Internal)) {
 	ctx := core.WithRequestID(context.Background(), "__single_run__")
 	var configFilePath *string
-	if path := program.Options().ConfigFilePath; path != "" {
+	if path := program.Options().ConfigFilePath.AsString(); path != "" {
 		configFilePath = &path
 	}
 	reportDiagnostic := func(d *ast.Diagnostic) {
 		filePath := configFilePath
 		textRange := core.UndefinedTextRange()
 		if file := d.File(); file != nil {
-			fileName := file.FileName()
+			fileName := file.FileName().AsString()
 			filePath = &fileName
 			textRange = d.Loc()
 		}
@@ -330,11 +330,11 @@ func reportTypeScriptDiagnostics(program *compiler.Program, files []*ast.SourceF
 
 	if typeErrors.ReportSyntactic {
 		for _, file := range files {
-			fileName := file.FileName()
+			fileName := file.FileName().AsString()
 
 			syntacticDiagnostics := program.GetSyntacticDiagnostics(ctx, file)
 			for _, d := range syntacticDiagnostics {
-				if d.File() != nil && d.File().FileName() == fileName {
+				if d.File() != nil && d.File().FileName().AsString() == fileName {
 					reportDiagnostic(d)
 				}
 			}
@@ -342,16 +342,19 @@ func reportTypeScriptDiagnostics(program *compiler.Program, files []*ast.SourceF
 	}
 
 	if typeErrors.ReportSemantic {
-		semanticDiagnosticsByFile := program.GetSemanticDiagnosticsWithoutNoEmitFiltering(ctx, files)
+		semanticDiagnosticsByFile := program.GetSemanticDiagnosticsForIncremental(ctx, files)
 
 		programOption := program.Options()
 		var declarationDiagnosticsByFile [][]*ast.Diagnostic
 		if programOption.GetEmitDeclarations() {
-			declarationDiagnosticsByFile = program.GetDeclarationDiagnosticsForFiles(ctx, files)
+			declarationDiagnosticsByFile = make([][]*ast.Diagnostic, len(files))
+			for i, file := range files {
+				declarationDiagnosticsByFile[i] = program.GetDeclarationDiagnostics(ctx, file)
+			}
 		}
 
 		for i, file := range files {
-			fileName := file.FileName()
+			fileName := file.FileName().AsString()
 			finalDiagnostics := compiler.FilterNoEmitSemanticDiagnostics(semanticDiagnosticsByFile[file], programOption)
 			includeProcessorDiagnostics := program.GetIncludeProcessorDiagnostics(file)
 			var declarationDiagnostics []*ast.Diagnostic
@@ -369,7 +372,7 @@ func reportTypeScriptDiagnostics(program *compiler.Program, files []*ast.SourceF
 			}
 
 			for _, d := range finalDiagnostics {
-				if d.File() != nil && d.File().FileName() == fileName {
+				if d.File() != nil && d.File().FileName().AsString() == fileName {
 					reportDiagnostic(d)
 				}
 			}
@@ -468,7 +471,7 @@ func RunLinterOnProgram(options RunLinterOnProgramOptions) error {
 	reportTypeScriptDiagnostics(program, files, typeErrors, onInternalDiagnostic)
 	scheduler := newCheckerScheduler(scheduling, program, files, workers)
 
-	wg := core.NewWorkGroup(scheduler.workers == 1)
+	wg := core.NewWorkGroup(scheduler.workers)
 	for i := range scheduler.workers {
 		wg.Queue(func() {
 			initial, hasWork := scheduler.initialWorkload(i)
@@ -501,7 +504,7 @@ func RunLinterOnProgram(options RunLinterOnProgramOptions) error {
 
 					for file := w.nextFile(); file != nil; file = w.nextFile() {
 						if logLevel == utils.LogLevelDebug {
-							log.Print(file.FileName())
+							log.Print(file.FileName().AsString())
 						}
 						ctxBuilder.file = file
 						ctx.SourceFile = file
@@ -559,7 +562,7 @@ func RunLinterOnProgram(options RunLinterOnProgramOptions) error {
 
 				for file := w.nextFile(); file != nil; file = w.nextFile() {
 					if logLevel == utils.LogLevelDebug {
-						log.Print(file.FileName())
+						log.Print(file.FileName().AsString())
 					}
 					ctxBuilder.file = file
 					ctx.SourceFile = file

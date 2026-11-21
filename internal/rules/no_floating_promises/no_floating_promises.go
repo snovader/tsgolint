@@ -3,9 +3,9 @@ package no_floating_promises
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -123,7 +123,7 @@ var NoFloatingPromisesRule = rule.Rule{
 			param *ast.Symbol,
 			node *ast.Node,
 		) bool {
-			t := checker.Checker_getApparentType(ctx.TypeChecker, ctx.TypeChecker.GetTypeOfSymbolAtLocation(param, node))
+			t := ctx.TypeChecker.GetApparentType(ctx.TypeChecker.GetTypeOfSymbolAtLocation(param, node))
 			for _, part := range utils.UnionTypeParts(t) {
 				if len(utils.GetCallSignatures(ctx.TypeChecker, part)) != 0 {
 					return true
@@ -146,7 +146,7 @@ var NoFloatingPromisesRule = rule.Rule{
 			}
 
 			// Otherwise, we always consider the built-in Promise to be Promise-like...
-			typeParts := utils.UnionTypeParts(checker.Checker_getApparentType(ctx.TypeChecker, t))
+			typeParts := utils.UnionTypeParts(ctx.TypeChecker.GetApparentType(t))
 			if utils.Some(typeParts, func(typePart *checker.Type) bool {
 				return utils.IsPromiseLike(ctx.Program, ctx.TypeChecker, typePart)
 			}) {
@@ -163,7 +163,7 @@ var NoFloatingPromisesRule = rule.Rule{
 			//
 			//   https://github.com/ajafff/tsutils/blob/49d0d31050b44b81e918eae4fbaf1dfe7b7286af/util/type.ts#L95-L125
 			for _, typePart := range typeParts {
-				then := checker.Checker_getPropertyOfType(ctx.TypeChecker, typePart, "then")
+				then := ctx.TypeChecker.GetPropertyOfType(typePart, "then")
 				if then == nil {
 					continue
 				}
@@ -172,7 +172,7 @@ var NoFloatingPromisesRule = rule.Rule{
 				if hasMatchingSignature(
 					thenType,
 					func(signature *checker.Signature) bool {
-						params := checker.Signature_parameters(signature)
+						params := signature.Parameters()
 						return len(params) >= 2 && isFunctionParam(params[0], node) && isFunctionParam(params[1], node)
 					}) {
 					return true
@@ -182,17 +182,17 @@ var NoFloatingPromisesRule = rule.Rule{
 		}
 		isPromiseArray := func(node *ast.Node, t *checker.Type) bool {
 			for _, typePart := range utils.UnionTypeParts(t) {
-				apparent := checker.Checker_getApparentType(ctx.TypeChecker, typePart)
+				apparent := ctx.TypeChecker.GetApparentType(typePart)
 
-				if checker.Checker_isArrayType(ctx.TypeChecker, apparent) {
-					arrayType := checker.Checker_getTypeArguments(ctx.TypeChecker, apparent)[0]
+				if ctx.TypeChecker.IsArrayType(apparent) {
+					arrayType := ctx.TypeChecker.GetTypeArguments(apparent)[0]
 					if isPromiseLike(node, arrayType) {
 						return true
 					}
 				}
 
 				if checker.IsTupleType(apparent) {
-					for _, tupleElementType := range checker.Checker_getTypeArguments(ctx.TypeChecker, apparent) {
+					for _, tupleElementType := range ctx.TypeChecker.GetTypeArguments(apparent) {
 						if isPromiseLike(node, tupleElementType) {
 							return true
 						}

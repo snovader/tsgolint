@@ -1,9 +1,9 @@
 package no_confusing_void_expression
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -139,7 +139,7 @@ var NoConfusingVoidExpressionRule = rule.Rule{
 
 			returnTypeNode := functionNode.Type()
 			if returnTypeNode != nil {
-				returnType := checker.Checker_getTypeFromTypeNode(ctx.TypeChecker, returnTypeNode)
+				returnType := ctx.TypeChecker.GetTypeFromTypeNode(returnTypeNode)
 
 				return utils.Some(utils.UnionTypeParts(returnType), utils.IsIntrinsicVoidType)
 			}
@@ -157,7 +157,7 @@ var NoConfusingVoidExpressionRule = rule.Rule{
 				callSignatures := utils.GetCallSignatures(ctx.TypeChecker, t)
 
 				return utils.Some(callSignatures, func(s *checker.Signature) bool {
-					returnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, s)
+					returnType := ctx.TypeChecker.GetReturnTypeOfSignature(s)
 
 					return utils.Some(utils.UnionTypeParts(returnType), utils.IsIntrinsicVoidType)
 				})

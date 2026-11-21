@@ -1,9 +1,9 @@
 package strict_boolean_expressions
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -172,7 +172,7 @@ var StrictBooleanExpressionsRule = rule.Rule{
 						var types []*checker.Type
 						for _, signature := range signatures {
 							returnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
-							typeFlags := checker.Type_flags(returnType)
+							typeFlags := returnType.Flags()
 							if typeFlags&checker.TypeFlagsTypeParameter != 0 {
 								constraint := ctx.TypeChecker.GetConstraintOfTypeParameter(returnType)
 								if constraint != nil {
@@ -255,12 +255,12 @@ func findTruthinessAssertedArgumentInUnionSignatures(typeChecker *checker.Checke
 
 func findTruthinessAssertedArgumentInPredicate(typePredicate *checker.TypePredicate, checkableArguments []*ast.Node) *ast.Node {
 	if typePredicate == nil ||
-		checker.TypePredicate_kind(typePredicate) != checker.TypePredicateKindAssertsIdentifier ||
-		checker.TypePredicate_t(typePredicate) != nil {
+		typePredicate.Kind() != checker.TypePredicateKindAssertsIdentifier ||
+		typePredicate.Type() != nil {
 		return nil
 	}
 
-	parameterIndex := int(checker.TypePredicate_parameterIndex(typePredicate))
+	parameterIndex := int(typePredicate.ParameterIndex())
 	if parameterIndex < 0 || parameterIndex >= len(checkableArguments) {
 		return nil
 	}
@@ -370,7 +370,7 @@ func analyzeTypeParts(typeChecker *checker.Checker, types []*checker.Type) typeI
 
 func analyzeTypePart(_typeChecker *checker.Checker, t *checker.Type) typeInfo {
 	info := typeInfo{}
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 
 	if utils.IsIntersectionType(t) {
 		info.isIntersection = true

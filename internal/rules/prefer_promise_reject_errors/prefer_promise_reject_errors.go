@@ -1,8 +1,8 @@
 package prefer_promise_reject_errors
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -67,13 +67,13 @@ var PreferPromiseRejectErrorsRule = rule.Rule{
 					if symbol == nil {
 						return
 					}
-					param := symbol.ValueDeclaration
+					param := symbol.ValueDeclaration()
 
 					if param == nil || !ast.IsParameterDeclaration(param) {
 						return
 					}
 
-					parentNode := symbol.ValueDeclaration.Parent
+					parentNode := symbol.ValueDeclaration().Parent
 					if !ast.IsFunctionExpression(parentNode) && !ast.IsArrowFunction(parentNode) {
 						return
 					}

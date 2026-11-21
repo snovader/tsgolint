@@ -1,5 +1,10 @@
 # Patches
 
+This fork uses `compiler-source.json` and `tools/prepare-compiler.mjs` instead of
+applying the legacy `typescript-go` patch stack below. `collections-json.patch`
+adapts the synchronized collections to tsgolint's JSON library without changing
+the compiler checkout. The other patches are retained as upstream history.
+
 `0007-perf-batch-selected-file-declaration-diagnostics.patch` adds a compiler API
 for collecting declaration diagnostics for selected files after semantic checking.
 It runs one task per compiler-owned checker without holding the checker mutex,

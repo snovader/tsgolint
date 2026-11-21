@@ -3,8 +3,8 @@ package use_unknown_in_catch_callback_variable
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -64,22 +64,22 @@ var UseUnknownInCatchCallbackVariableRule = rule.Rule{
 		isFlaggableHandlerType := func(t *checker.Type) bool {
 			for _, part := range utils.UnionTypeParts(t) {
 				for _, callSignature := range utils.GetCallSignatures(ctx.TypeChecker, part) {
-					params := checker.Signature_parameters(callSignature)
+					params := callSignature.Parameters()
 					if len(params) == 0 {
 						continue
 					}
 
 					firstParam := params[0]
 
-					firstParamType := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, firstParam)
-					decl := firstParam.ValueDeclaration
+					firstParamType := ctx.TypeChecker.GetTypeOfSymbol(firstParam)
+					decl := firstParam.ValueDeclaration()
 
 					if decl != nil && decl.AsParameterDeclaration().DotDotDotToken != nil {
 						// a rest arg that's not an array or tuple should definitely be flagged.
 						if !checker.Checker_isArrayOrTupleType(ctx.TypeChecker, firstParamType) {
 							return true
 						}
-						firstParamType = checker.Checker_getTypeArguments(ctx.TypeChecker, firstParamType)[0]
+						firstParamType = ctx.TypeChecker.GetTypeArguments(firstParamType)[0]
 					}
 
 					if !utils.IsTypeFlagSet(firstParamType, checker.TypeFlagsUnknown) {

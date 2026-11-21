@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -74,19 +74,19 @@ func getLogicalResultType(ctx rule.RuleContext, operator ast.Kind, left, right *
 		if checker.Checker_hasTypeFacts(ctx.TypeChecker, left, checker.TypeFactsTruthy) {
 			falsySource := left
 			if !utils.IsStrictCompilerOptionEnabled(ctx.Program.Options(), ctx.Program.Options().StrictNullChecks) {
-				falsySource = checker.Checker_getBaseTypeOfLiteralType(ctx.TypeChecker, right)
+				falsySource = ctx.TypeChecker.GetBaseTypeOfLiteralType(right)
 			}
 			falsy := checker.Checker_extractDefinitelyFalsyTypes(ctx.TypeChecker, falsySource)
 			return checker.Checker_getUnionTypeEx(ctx.TypeChecker, []*checker.Type{falsy, right}, checker.UnionReductionLiteral, nil, nil)
 		}
 	case ast.KindBarBarToken:
 		if checker.Checker_hasTypeFacts(ctx.TypeChecker, left, checker.TypeFactsFalsy) {
-			truthy := checker.Checker_GetNonNullableType(ctx.TypeChecker, checker.Checker_removeDefinitelyFalsyTypes(ctx.TypeChecker, left))
+			truthy := ctx.TypeChecker.GetNonNullableType(checker.Checker_removeDefinitelyFalsyTypes(ctx.TypeChecker, left))
 			return checker.Checker_getUnionTypeEx(ctx.TypeChecker, []*checker.Type{truthy, right}, checker.UnionReductionSubtype, nil, nil)
 		}
 	case ast.KindQuestionQuestionToken:
 		if checker.Checker_hasTypeFacts(ctx.TypeChecker, left, checker.TypeFactsEQUndefinedOrNull) {
-			nonNullable := checker.Checker_GetNonNullableType(ctx.TypeChecker, left)
+			nonNullable := ctx.TypeChecker.GetNonNullableType(left)
 			return checker.Checker_getUnionTypeEx(ctx.TypeChecker, []*checker.Type{nonNullable, right}, checker.UnionReductionSubtype, nil, nil)
 		}
 	}
@@ -116,7 +116,7 @@ func isInNarrowingAssignment(ctx rule.RuleContext, node *ast.Node, uncastType, c
 			// branch's types when comparing narrowing with and without the cast.
 			otherType := ctx.TypeChecker.GetTypeAtLocation(other)
 			for i := len(propertyPath) - 1; i >= 0 && otherType != nil; i-- {
-				propertyType := checker.Checker_getTypeOfPropertyOfType(ctx.TypeChecker, otherType, propertyPath[i])
+				propertyType := ctx.TypeChecker.GetTypeOfPropertyOfType(otherType, propertyPath[i])
 				if propertyType == nil {
 					if _, err := strconv.Atoi(propertyPath[i]); err == nil {
 						propertyType = utils.GetNumberIndexType(ctx.TypeChecker, otherType)
@@ -133,8 +133,8 @@ func isInNarrowingAssignment(ctx rule.RuleContext, node *ast.Node, uncastType, c
 			(parent.AsBinaryExpression().OperatorToken.Kind == ast.KindBarBarToken || parent.AsBinaryExpression().OperatorToken.Kind == ast.KindQuestionQuestionToken) {
 			// These operators already discard nullish values from their left
 			// operand, so a purely non-nullable assertion cannot change narrowing.
-			uncastNonNullable := checker.Checker_GetNonNullableType(ctx.TypeChecker, uncastType)
-			castNonNullable := checker.Checker_GetNonNullableType(ctx.TypeChecker, castType)
+			uncastNonNullable := ctx.TypeChecker.GetNonNullableType(uncastType)
+			castNonNullable := ctx.TypeChecker.GetNonNullableType(castType)
 			if checker.Checker_isTypeIdenticalTo(ctx.TypeChecker, uncastNonNullable, castNonNullable) {
 				return false
 			}
@@ -164,8 +164,8 @@ func isInNarrowingAssignment(ctx rule.RuleContext, node *ast.Node, uncastType, c
 				for _, property := range properties[slices.Index(properties, current)+1:] {
 					if ast.IsSpreadAssignment(property) {
 						spreadType := ctx.TypeChecker.GetTypeAtLocation(property.Expression())
-						overwriting := checker.Checker_getPropertyOfType(ctx.TypeChecker, spreadType, propertyPath[len(propertyPath)-1])
-						if overwriting != nil && overwriting.Flags&ast.SymbolFlagsOptional == 0 && overwriting.CheckFlags&ast.CheckFlagsPartial == 0 &&
+						overwriting := ctx.TypeChecker.GetPropertyOfType(spreadType, propertyPath[len(propertyPath)-1])
+						if overwriting != nil && overwriting.Flags()&ast.SymbolFlagsOptional == 0 && overwriting.CheckFlags()&ast.CheckFlagsPartial == 0 &&
 							checker.GetDeclarationModifierFlagsFromSymbol(overwriting)&(ast.ModifierFlagsPrivate|ast.ModifierFlagsProtected) == 0 &&
 							checker.Checker_isSpreadableProperty(ctx.TypeChecker, overwriting) {
 							return false
@@ -207,7 +207,7 @@ func isInNarrowingAssignment(ctx rule.RuleContext, node *ast.Node, uncastType, c
 		if receiverType == nil {
 			return false
 		}
-		if constraint := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, receiverType); constraint != nil {
+		if constraint := ctx.TypeChecker.GetBaseConstraintOfType(receiverType); constraint != nil {
 			receiverType = constraint
 		}
 		if !utils.IsUnionType(receiverType) {

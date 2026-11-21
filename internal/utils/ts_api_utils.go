@@ -1,9 +1,9 @@
 package utils
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 )
 
 func UnionTypeParts(t *checker.Type) []*checker.Type {
@@ -48,7 +48,7 @@ func IntersectionTypeParts(t *checker.Type) []*checker.Type {
 }
 
 func IsTypeFlagSet(t *checker.Type, flags checker.TypeFlags) bool {
-	return t != nil && checker.Type_flags(t)&flags != 0
+	return t != nil && t.Flags()&flags != 0
 }
 
 func IsIntrinsicType(t *checker.Type) bool {
@@ -92,11 +92,11 @@ func IsTypeVoidType(t *checker.Type) bool {
 }
 
 func GetNonNullableType(typeChecker *checker.Checker, t *checker.Type) *checker.Type {
-	return checker.Checker_GetNonNullableType(typeChecker, t)
+	return typeChecker.GetNonNullableType(t)
 }
 
 func IsNullableType(typeChecker *checker.Checker, t *checker.Type) bool {
-	return checker.Checker_IsNullableType(typeChecker, t)
+	return typeChecker.IsNullableType(t)
 }
 
 func IsBooleanLiteralType(t *checker.Type) bool {
@@ -110,10 +110,10 @@ func IsFalseLiteralType(t *checker.Type) bool {
 }
 
 func GetCallSignatures(typeChecker *checker.Checker, t *checker.Type) []*checker.Signature {
-	return checker.Checker_getSignaturesOfType(typeChecker, t, checker.SignatureKindCall)
+	return typeChecker.GetSignaturesOfType(t, checker.SignatureKindCall)
 }
 func GetConstructSignatures(typeChecker *checker.Checker, t *checker.Type) []*checker.Signature {
-	return checker.Checker_getSignaturesOfType(typeChecker, t, checker.SignatureKindConstruct)
+	return typeChecker.GetSignaturesOfType(t, checker.SignatureKindConstruct)
 }
 
 // ex. getCallSignaturesOfType
@@ -141,11 +141,11 @@ func CollectAllCallSignatures(typeChecker *checker.Checker, t *checker.Type) []*
 		}
 		return signatures
 	}
-	return checker.Checker_getSignaturesOfType(typeChecker, t, checker.SignatureKindCall)
+	return typeChecker.GetSignaturesOfType(t, checker.SignatureKindCall)
 }
 
 func IsSymbolFlagSet(symbol *ast.Symbol, flag ast.SymbolFlags) bool {
-	return symbol != nil && symbol.Flags&flag != 0
+	return symbol != nil && symbol.Flags()&flag != 0
 }
 
 func IsCallback(
@@ -153,10 +153,10 @@ func IsCallback(
 	param *ast.Symbol,
 	node *ast.Node,
 ) bool {
-	t := checker.Checker_getApparentType(typeChecker, typeChecker.GetTypeOfSymbolAtLocation(param, node))
+	t := typeChecker.GetApparentType(typeChecker.GetTypeOfSymbolAtLocation(param, node))
 
-	if param.ValueDeclaration != nil && ast.IsParameterDeclaration(param.ValueDeclaration) && param.ValueDeclaration.AsParameterDeclaration().DotDotDotToken != nil {
-		t = checker.Checker_getIndexTypeOfType(typeChecker, t, checker.Checker_numberType(typeChecker))
+	if param.ValueDeclaration() != nil && ast.IsParameterDeclaration(param.ValueDeclaration()) && param.ValueDeclaration().AsParameterDeclaration().DotDotDotToken != nil {
+		t = typeChecker.GetIndexTypeOfType(t, typeChecker.GetNumberType())
 		if t == nil {
 			return false
 		}
@@ -180,8 +180,8 @@ func IsThenableType(
 	if t == nil {
 		t = typeChecker.GetTypeAtLocation(node)
 	}
-	for _, typePart := range UnionTypeParts(checker.Checker_getApparentType(typeChecker, t)) {
-		then := checker.Checker_getPropertyOfType(typeChecker, typePart, "then")
+	for _, typePart := range UnionTypeParts(typeChecker.GetApparentType(t)) {
+		then := typeChecker.GetPropertyOfType(typePart, "then")
 		if then == nil {
 			continue
 		}
@@ -189,8 +189,8 @@ func IsThenableType(
 		thenType := typeChecker.GetTypeOfSymbolAtLocation(then, node)
 
 		for _, subTypePart := range UnionTypeParts(thenType) {
-			for _, signature := range checker.Checker_getSignaturesOfType(typeChecker, subTypePart, checker.SignatureKindCall) {
-				if len(checker.Signature_parameters(signature)) != 0 && IsCallback(typeChecker, checker.Signature_parameters(signature)[0], node) {
+			for _, signature := range typeChecker.GetSignaturesOfType(subTypePart, checker.SignatureKindCall) {
+				if len(signature.Parameters()) != 0 && IsCallback(typeChecker, signature.Parameters()[0], node) {
 					return true
 				}
 			}
@@ -200,7 +200,7 @@ func IsThenableType(
 }
 
 func GetWellKnownSymbolPropertyOfType(t *checker.Type, name string, typeChecker *checker.Checker) *ast.Symbol {
-	return checker.Checker_getPropertyOfType(typeChecker, t, checker.Checker_getPropertyNameForKnownSymbolName(typeChecker, name))
+	return typeChecker.GetPropertyOfType(t, checker.Checker_getPropertyNameForKnownSymbolName(typeChecker, name))
 }
 
 /**

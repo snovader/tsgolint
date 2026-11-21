@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -59,11 +59,11 @@ func newFunctionSignature(
 		return nil
 	}
 
-	parameters := checker.Signature_parameters(signature)
+	parameters := signature.Parameters()
 	var restParam *ast.Symbol
 
 	for i, param := range parameters {
-		if param.Declarations != nil && len(param.Declarations) != 0 && utils.IsRestParameterDeclaration(param.Declarations[0]) {
+		if param.Declarations() != nil && len(param.Declarations()) != 0 && utils.IsRestParameterDeclaration(param.Declarations()[0]) {
 			// is a rest param
 			restParam = param
 			parameters = parameters[:i]
@@ -111,12 +111,12 @@ func (s *functionSignature) getRestType() *restType {
 	restT := restType{Index: len(s.parameters), Kind: restTypeKindOther}
 	if s.restParam != nil {
 		t := s.typeChecker.GetTypeOfSymbolAtLocation(s.restParam, s.node)
-		if checker.Checker_isArrayType(s.typeChecker, t) {
+		if s.typeChecker.IsArrayType(t) {
 			restT.Kind = restTypeKindArray
-			restT.Type = checker.Checker_getTypeArguments(s.typeChecker, t)[0]
+			restT.Type = s.typeChecker.GetTypeArguments(t)[0]
 		} else if checker.IsTupleType(t) {
 			restT.Kind = restTypeKindTuple
-			restT.TypeArguments = checker.Checker_getTypeArguments(s.typeChecker, t)
+			restT.TypeArguments = s.typeChecker.GetTypeArguments(t)
 		} else {
 			restT.Type = t
 		}
@@ -204,7 +204,7 @@ var NoUnsafeArgumentRule = rule.Rule{
 		}
 
 		describeTypeForSpread := func(t *checker.Type) string {
-			if checker.Checker_isArrayType(ctx.TypeChecker, t) && utils.IsIntrinsicErrorType(checker.Checker_getTypeArguments(ctx.TypeChecker, t)[0]) {
+			if ctx.TypeChecker.IsArrayType(t) && utils.IsIntrinsicErrorType(ctx.TypeChecker.GetTypeArguments(t)[0]) {
 				return "error"
 			}
 
@@ -261,7 +261,7 @@ var NoUnsafeArgumentRule = rule.Rule{
 						ctx.ReportNode(argument, buildUnsafeArraySpreadMessage(describeTypeForSpread(spreadArgType)))
 					} else if checker.IsTupleType(spreadArgType) {
 						// foo(...[tuple1, tuple2])
-						spreadTypeArguments := checker.Checker_getTypeArguments(ctx.TypeChecker, spreadArgType)
+						spreadTypeArguments := ctx.TypeChecker.GetTypeArguments(spreadArgType)
 						for _, tupleType := range spreadTypeArguments {
 							parameterType := signature.getNextParameterType()
 							if parameterType == nil {
@@ -279,7 +279,7 @@ var NoUnsafeArgumentRule = rule.Rule{
 								ctx.ReportNode(argument, buildUnsafeTupleSpreadMessage(describeTypeForTuple(tupleType), describeType(parameterType)))
 							}
 						}
-						if checker.TupleType_combinedFlags(spreadArgType.Target().AsTupleType())&checker.ElementFlagsVariable != 0 {
+						if spreadArgType.Target().AsTupleType().CombinedFlags()&checker.ElementFlagsVariable != 0 {
 							// the last element was a rest - so all remaining defined arguments can be considered "consumed"
 							// all remaining arguments should be compared against the rest type (if one exists)
 							signature.consumeRemainingArguments()

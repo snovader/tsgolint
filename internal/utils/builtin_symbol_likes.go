@@ -1,18 +1,15 @@
 package utils
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/tsoptions"
-	"github.com/microsoft/typescript-go/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/tsoptions"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
 )
 
 func ComparePaths(a string, b string, program *compiler.Program) int {
-	return tspath.ComparePaths(a, b, tspath.ComparePathsOptions{
-		CurrentDirectory:          program.Host().GetCurrentDirectory(),
-		UseCaseSensitiveFileNames: program.Host().FS().UseCaseSensitiveFileNames(),
-	})
+	return program.Host().FS().CaseSensitivity().CompareFilePaths(tspath.ToRootedFilePath(a, program.GetCurrentDirectory()), tspath.ToRootedFilePath(b, program.GetCurrentDirectory()))
 }
 
 func IsSourceFileDefaultLibrary(program *compiler.Program, file *ast.SourceFile) bool {
@@ -20,7 +17,7 @@ func IsSourceFileDefaultLibrary(program *compiler.Program, file *ast.SourceFile)
 		return false
 	}
 
-	if program.IsSourceFileDefaultLibrary(file.Path()) {
+	if program.IsSourceFileDefaultLibrary(file.PathKey()) {
 		return true
 	}
 
@@ -34,19 +31,19 @@ func IsSourceFileDefaultLibrary(program *compiler.Program, file *ast.SourceFile)
 	var libs []string
 	if options.Lib == nil {
 		name := tsoptions.GetDefaultLibFileName(options)
-		libs = append(libs, tspath.CombinePaths(program.Host().DefaultLibraryPath(), name))
+		libs = append(libs, tspath.CombinePaths(program.Host().DefaultLibraryPath().AsString(), name))
 	} else {
 		for _, lib := range options.Lib {
 			name, ok := tsoptions.GetLibFileName(lib)
 			if ok {
-				libs = append(libs, tspath.CombinePaths(program.Host().DefaultLibraryPath(), name))
+				libs = append(libs, tspath.CombinePaths(program.Host().DefaultLibraryPath().AsString(), name))
 			}
 			// !!! error on unknown name
 		}
 	}
 
 	return Some(libs, func(lib string) bool {
-		return ComparePaths(file.FileName(), lib, program) == 0
+		return ComparePaths(file.FileName().AsString(), lib, program) == 0
 	})
 }
 
@@ -58,7 +55,7 @@ func IsSymbolFromDefaultLibrary(
 		return false
 	}
 
-	for _, declaration := range symbol.Declarations {
+	for _, declaration := range symbol.Declarations() {
 		sourceFile := ast.GetSourceFileOfNode(declaration)
 		if IsSourceFileDefaultLibrary(program, sourceFile) {
 			return true
@@ -127,8 +124,8 @@ func IsReadonlyErrorLike(
 	t *checker.Type,
 ) bool {
 	return IsReadonlyTypeLike(program, typeChecker, t, func(subtype *checker.Type) bool {
-		checker.Type_alias(subtype).TypeArguments()
-		typeArgument := checker.Type_alias(subtype).TypeArguments()[0]
+		subtype.Alias().TypeArguments()
+		typeArgument := subtype.Alias().TypeArguments()[0]
 
 		return IsErrorLike(program, typeChecker, typeArgument) || IsReadonlyErrorLike(program, typeChecker, typeArgument)
 	})
@@ -148,7 +145,7 @@ func IsReadonlyTypeLike(
 	predicate func(subType *checker.Type) bool,
 ) bool {
 	return IsBuiltinTypeAliasLike(program, typeChecker, t, func(subtype *checker.Type) bool {
-		return checker.Type_alias(subtype).Symbol().Name == "Readonly" && predicate(subtype)
+		return subtype.Alias().Symbol().Name() == "Readonly" && predicate(subtype)
 	})
 }
 
@@ -167,7 +164,7 @@ func IsBuiltinTypeAliasLike(
 	predicate func(subType *checker.Type) bool,
 ) bool {
 	return IsBuiltinSymbolLikeRecurser(program, typeChecker, t, func(subtype *checker.Type) builtinPredicateMatches {
-		aliasSymbol := checker.Type_alias(subtype)
+		aliasSymbol := subtype.Alias()
 		if aliasSymbol == nil || len(aliasSymbol.TypeArguments()) == 0 {
 			return builtinPredicateMatches_False
 		}
@@ -187,12 +184,12 @@ func IsBuiltinSymbolLike(
 	symbolNames ...string,
 ) bool {
 	return IsBuiltinSymbolLikeRecurser(program, typeChecker, t, func(subType *checker.Type) builtinPredicateMatches {
-		symbol := checker.Type_symbol(subType)
+		symbol := subType.Symbol()
 		if symbol == nil {
 			return builtinPredicateMatches_False
 		}
 
-		actualSymbolName := symbol.Name
+		actualSymbolName := symbol.Name()
 
 		if Some(symbolNames, func(name string) bool { return actualSymbolName == name }) && IsSymbolFromDefaultLibrary(program, symbol) {
 			return builtinPredicateMatches_True
@@ -208,7 +205,7 @@ func IsAnyBuiltinSymbolLike(
 	t *checker.Type,
 ) bool {
 	return IsBuiltinSymbolLikeRecurser(program, typeChecker, t, func(subType *checker.Type) builtinPredicateMatches {
-		symbol := checker.Type_symbol(subType)
+		symbol := subType.Symbol()
 		if symbol == nil {
 			return builtinPredicateMatches_False
 		}
@@ -238,7 +235,7 @@ func IsBuiltinSymbolLikeRecurser(
 		})
 	}
 	if IsTypeParameter(t) {
-		constraint := checker.Checker_getBaseConstraintOfType(typeChecker, t)
+		constraint := typeChecker.GetBaseConstraintOfType(t)
 
 		if constraint != nil {
 			return IsBuiltinSymbolLikeRecurser(program, typeChecker, constraint, predicate)
@@ -254,10 +251,10 @@ func IsBuiltinSymbolLikeRecurser(
 		return false
 	}
 
-	symbol := checker.Type_symbol(t)
-	if symbol != nil && symbol.Flags&(ast.SymbolFlagsClass|ast.SymbolFlagsInterface) != 0 {
-		declaredType := checker.Checker_getDeclaredTypeOfSymbol(typeChecker, symbol)
-		for _, baseType := range checker.Checker_getBaseTypes(typeChecker, declaredType) {
+	symbol := t.Symbol()
+	if symbol != nil && symbol.Flags()&(ast.SymbolFlagsClass|ast.SymbolFlagsInterface) != 0 {
+		declaredType := typeChecker.GetDeclaredTypeOfSymbol(symbol)
+		for _, baseType := range typeChecker.GetBaseTypes(declaredType) {
 			if IsBuiltinSymbolLikeRecurser(program, typeChecker, baseType, predicate) {
 				return true
 			}

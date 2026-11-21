@@ -1,16 +1,18 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/bundled"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/tsoptions"
-	"github.com/microsoft/typescript-go/shim/tspath"
-	"github.com/microsoft/typescript-go/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/bundled"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/tsoptions"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
 	"github.com/typescript-eslint/tsgolint/internal/diagnostic"
 )
 
@@ -28,20 +30,21 @@ func enhanceHelpDiagnosticMessage(msg string) string {
 }
 
 func CreateProgram(singleThreaded bool, fs vfs.FS, cwd string, tsconfigPath string, host compiler.CompilerHost, suppressProgramDiagnostics bool) (*compiler.Program, []diagnostic.Internal, error) {
-	resolvedConfigPath := tspath.ResolvePath(cwd, tsconfigPath)
-	if !fs.FileExists(resolvedConfigPath) {
+	resolvedConfigFile := tspath.ToRootedFilePath(tsconfigPath, tspath.RootedDirectoryPathFromAbsolute(cwd))
+	resolvedConfigPath := resolvedConfigFile.AsString()
+	if !fs.FileExists(resolvedConfigFile) {
 		return nil, nil, fmt.Errorf("couldn't read tsconfig at %v", resolvedConfigPath)
 	}
 
-	configParseResult, diagnostics := tsoptions.GetParsedCommandLineOfConfigFile(tsconfigPath, &core.CompilerOptions{}, nil, host, nil)
+	configParseResult, diagnostics := tsoptions.GetParsedCommandLineOfConfigFile(resolvedConfigFile, &core.CompilerOptions{}, nil, tsoptions.NewDefaultParseConfigHost(fs), nil)
 
 	if len(diagnostics) > 0 {
 		internalDiags := make([]diagnostic.Internal, len(diagnostics))
 		for i, d := range diagnostics {
 			loc := d.Loc()
 			filePath := resolvedConfigPath
-			if d.File() != nil && d.File().FileName() != "" {
-				filePath = d.File().FileName()
+			if d.File() != nil && d.File().FileName().AsString() != "" {
+				filePath = d.File().FileName().AsString()
 			}
 			internalDiags[i] = diagnostic.Internal{
 				Range:       core.NewTextRange(loc.Pos(), loc.End()),
@@ -54,13 +57,14 @@ func CreateProgram(singleThreaded bool, fs vfs.FS, cwd string, tsconfigPath stri
 		return nil, internalDiags, nil
 	}
 
-	if len(configParseResult.Errors) > 0 && !suppressProgramDiagnostics {
-		internalDiags := make([]diagnostic.Internal, len(configParseResult.Errors))
-		for i, e := range configParseResult.Errors {
+	configErrors := configParseDiagnostics(configParseResult)
+	if len(configErrors) > 0 && !suppressProgramDiagnostics {
+		internalDiags := make([]diagnostic.Internal, len(configErrors))
+		for i, e := range configErrors {
 			loc := e.Loc()
 			filePath := resolvedConfigPath
-			if e.File() != nil && e.File().FileName() != "" {
-				filePath = e.File().FileName()
+			if e.File() != nil && e.File().FileName().AsString() != "" {
+				filePath = e.File().FileName().AsString()
 			}
 			internalDiags[i] = diagnostic.Internal{
 				Range:       core.NewTextRange(loc.Pos(), loc.End()),
@@ -74,17 +78,22 @@ func CreateProgram(singleThreaded bool, fs vfs.FS, cwd string, tsconfigPath stri
 	}
 
 	opts := compiler.ProgramOptions{
-		Config:                      configParseResult,
-		SingleThreaded:              core.TSTrue,
-		Host:                        host,
-		UseSourceOfProjectReference: true,
+		ProgramConfig: compiler.ProgramConfig{
+			Config:                      configParseResult,
+			SingleThreaded:              core.TSTrue,
+			UseSourceOfProjectReference: true,
+		},
+		ProgramHosts: compiler.ProgramHosts{Host: host},
 		// TODO: custom checker pool
 		// CreateCheckerPool: func(p *compiler.Program) compiler.CheckerPool {},
 	}
 	if !singleThreaded {
 		opts.SingleThreaded = core.TSFalse
 	}
-	program := compiler.NewProgram(opts)
+	program, err := compiler.NewProgram(context.Background(), opts)
+	if err != nil {
+		return nil, nil, err
+	}
 	if program == nil {
 		return nil, nil, errors.New("couldn't create program")
 	}
@@ -96,8 +105,8 @@ func CreateProgram(singleThreaded bool, fs vfs.FS, cwd string, tsconfigPath stri
 		for i, d := range program_diagnostics {
 			loc := d.Loc()
 			filePath := resolvedConfigPath
-			if d.File() != nil && d.File().FileName() != "" {
-				filePath = d.File().FileName()
+			if d.File() != nil && d.File().FileName().AsString() != "" {
+				filePath = d.File().FileName().AsString()
 			}
 			internalDiags[i] = diagnostic.Internal{
 				Range:       core.NewTextRange(loc.Pos(), loc.End()),
@@ -119,9 +128,9 @@ func CreateProgram(singleThreaded bool, fs vfs.FS, cwd string, tsconfigPath stri
 
 func CreateInferredProjectProgram(singleThreaded bool, fs vfs.FS, cwd string, host compiler.CompilerHost, fileNames []string) (*compiler.Program, []diagnostic.Internal, error) {
 	opts := compiler.ProgramOptions{
-		Config: &tsoptions.ParsedCommandLine{
-			ParsedConfig: &core.ParsedOptions{
-				CompilerOptions: &core.CompilerOptions{
+		ProgramConfig: compiler.ProgramConfig{
+			Config: tsoptions.NewParsedCommandLine(
+				&core.CompilerOptions{
 					AllowJs:                    core.TSTrue,
 					Module:                     core.ModuleKindESNext,
 					ModuleResolution:           core.ModuleResolutionKindBundler,
@@ -135,19 +144,37 @@ func CreateInferredProjectProgram(singleThreaded bool, fs vfs.FS, cwd string, ho
 					AllowNonTsExtensions:       core.TSTrue,
 					ResolveJsonModule:          core.TSTrue,
 				},
-				FileNames: fileNames,
-			},
+				Map(fileNames, func(name string) tspath.RootedFilePath {
+					return tspath.ToRootedFilePath(name, tspath.RootedDirectoryPathFromAbsolute(cwd))
+				}),
+				nil,
+				tspath.RootedDirectoryPathFromAbsolute(cwd),
+				fs.CaseSensitivity(),
+			),
+			SingleThreaded: core.TSTrue,
 		},
-		SingleThreaded: core.TSTrue,
-		Host:           host,
+		ProgramHosts: compiler.ProgramHosts{Host: host},
 	}
 	if !singleThreaded {
 		opts.SingleThreaded = core.TSFalse
 	}
-	program := compiler.NewProgram(opts)
+	program, err := compiler.NewProgram(context.Background(), opts)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// TODO: report syntactic diagnostics?
 
 	program.BindSourceFiles()
 	return program, nil, nil
+}
+
+// Syntax errors are more useful than the config-validation errors they cause.
+func configParseDiagnostics(config *tsoptions.ParsedCommandLine) []*ast.Diagnostic {
+	if config.ConfigFile != nil {
+		if diagnostics := config.ConfigFile.SourceFile.Diagnostics(); len(diagnostics) > 0 {
+			return diagnostics[:1]
+		}
+	}
+	return config.Errors
 }

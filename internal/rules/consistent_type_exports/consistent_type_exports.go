@@ -5,10 +5,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -50,16 +50,16 @@ func isSymbolTypeBased(typeChecker *checker.Checker, symbol *ast.Symbol) (bool, 
 	for symbol != nil && !visited[symbol] {
 		visited[symbol] = true
 
-		if slices.ContainsFunc(symbol.Declarations, ast.IsTypeOnlyImportOrExportDeclaration) {
+		if slices.ContainsFunc(symbol.Declarations(), ast.IsTypeOnlyImportOrExportDeclaration) {
 			return true, true
 		}
 
-		if symbol.Flags&ast.SymbolFlagsValue != 0 {
+		if symbol.Flags()&ast.SymbolFlagsValue != 0 {
 			return false, true
 		}
 
-		if symbol.Flags&ast.SymbolFlagsAlias != 0 {
-			next := checker.Checker_getImmediateAliasedSymbol(typeChecker, symbol)
+		if symbol.Flags()&ast.SymbolFlagsAlias != 0 {
+			next := typeChecker.GetImmediateAliasedSymbol(symbol)
 			if next == nil {
 				return false, false
 			}
@@ -172,15 +172,15 @@ var ConsistentTypeExportsRule = rule.Rule{
 			if moduleSymbol == nil {
 				return
 			}
-			sourceFileType := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, moduleSymbol)
+			sourceFileType := ctx.TypeChecker.GetTypeOfSymbol(moduleSymbol)
 			if sourceFileType == nil {
 				return
 			}
 
 			isThereAnyExportedValue := false
 
-			for _, propertyTypeSymbol := range checker.Checker_getPropertiesOfType(ctx.TypeChecker, sourceFileType) {
-				if checker.Checker_getPropertyOfType(ctx.TypeChecker, sourceFileType, propertyTypeSymbol.Name) != nil {
+			for _, propertyTypeSymbol := range ctx.TypeChecker.GetPropertiesOfType(sourceFileType) {
+				if ctx.TypeChecker.GetPropertyOfType(sourceFileType, propertyTypeSymbol.Name()) != nil {
 					isThereAnyExportedValue = true
 					break
 				}

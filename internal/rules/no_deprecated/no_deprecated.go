@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -136,8 +136,8 @@ var NoDeprecatedRule = rule.Rule{
 				return false, ""
 			}
 
-			for _, decl := range symbol.Declarations {
-				if checker.Checker_IsDeprecatedDeclaration(ctx.TypeChecker, decl) {
+			for _, decl := range symbol.Declarations() {
+				if ctx.TypeChecker.IsDeprecatedDeclaration(decl) {
 					reason := getJsDocDeprecationFromNode(decl)
 					return true, reason
 				}
@@ -178,7 +178,7 @@ var NoDeprecatedRule = rule.Rule{
 					break
 				}
 
-				immediateAliasedSymbol := checker.Checker_getImmediateAliasedSymbol(ctx.TypeChecker, symbol)
+				immediateAliasedSymbol := ctx.TypeChecker.GetImmediateAliasedSymbol(symbol)
 
 				if immediateAliasedSymbol == nil {
 					break
@@ -208,7 +208,7 @@ var NoDeprecatedRule = rule.Rule{
 
 			signatureDecl := signature.Declaration()
 			if signatureDecl != nil {
-				if checker.Checker_IsDeprecatedDeclaration(ctx.TypeChecker, signatureDecl) {
+				if ctx.TypeChecker.IsDeprecatedDeclaration(signatureDecl) {
 					reason := getJsDocDeprecationFromNode(signatureDecl)
 					return true, reason
 				}
@@ -227,8 +227,8 @@ var NoDeprecatedRule = rule.Rule{
 
 			// For property-like signatures, check the symbol itself first
 			var symbolDeclarationKind ast.Kind
-			if aliasedSymbol != nil && len(aliasedSymbol.Declarations) > 0 {
-				symbolDeclarationKind = aliasedSymbol.Declarations[0].Kind
+			if aliasedSymbol != nil && len(aliasedSymbol.Declarations()) > 0 {
+				symbolDeclarationKind = aliasedSymbol.Declarations()[0].Kind
 			}
 
 			// Properties with function-like types have @deprecated on their symbols, not signatures
@@ -283,7 +283,7 @@ var NoDeprecatedRule = rule.Rule{
 			}
 
 			// Get the property symbol
-			symbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, contextualType, propertyName)
+			symbol := ctx.TypeChecker.GetPropertyOfType(contextualType, propertyName)
 
 			return getJsDocDeprecation(symbol)
 		}
@@ -344,7 +344,7 @@ var NoDeprecatedRule = rule.Rule{
 				return "", nil, nil, false, ""
 			}
 
-			property := checker.Checker_getPropertyOfType(ctx.TypeChecker, contextualType, propertyName)
+			property := ctx.TypeChecker.GetPropertyOfType(contextualType, propertyName)
 			if property == nil || !checker.Checker_isDeprecatedSymbol(ctx.TypeChecker, property) {
 				return propertyName, contextualType, property, false, ""
 			}
@@ -438,7 +438,7 @@ var NoDeprecatedRule = rule.Rule{
 						}
 
 						// Get the type of this property
-						property := checker.Checker_getPropertyOfType(ctx.TypeChecker, parentSourceType, propertyName)
+						property := ctx.TypeChecker.GetPropertyOfType(parentSourceType, propertyName)
 						if property != nil {
 							return ctx.TypeChecker.GetTypeOfSymbolAtLocation(property, current)
 						}
@@ -453,7 +453,7 @@ var NoDeprecatedRule = rule.Rule{
 					}
 					// For arrays/tuples, try to get the first element type (index 0)
 					// Try getting property "0" for tuple types
-					property := checker.Checker_getPropertyOfType(ctx.TypeChecker, parentSourceType, "0")
+					property := ctx.TypeChecker.GetPropertyOfType(parentSourceType, "0")
 					if property != nil {
 						return ctx.TypeChecker.GetTypeOfSymbolAtLocation(property, current)
 					}
@@ -514,7 +514,7 @@ var NoDeprecatedRule = rule.Rule{
 								propertyName = bindingElem.PropertyName.Text()
 							}
 
-							property := checker.Checker_getPropertyOfType(ctx.TypeChecker, sourceType, propertyName)
+							property := ctx.TypeChecker.GetPropertyOfType(sourceType, propertyName)
 							propertySymbol := ctx.TypeChecker.GetSymbolAtLocation(node)
 
 							// Check alias chain first
@@ -536,8 +536,8 @@ var NoDeprecatedRule = rule.Rule{
 							}
 
 							// Check shorthand assignment value symbol
-							if propertySymbol != nil && propertySymbol.ValueDeclaration != nil {
-								valueSymbol := checker.Checker_GetShorthandAssignmentValueSymbol(ctx.TypeChecker, propertySymbol.ValueDeclaration)
+							if propertySymbol != nil && propertySymbol.ValueDeclaration() != nil {
+								valueSymbol := ctx.TypeChecker.GetShorthandAssignmentValueSymbol(propertySymbol.ValueDeclaration())
 								isDeprecated, reason = getJsDocDeprecation(valueSymbol)
 								if isDeprecated {
 									return true, reason
@@ -552,7 +552,7 @@ var NoDeprecatedRule = rule.Rule{
 					parentType := ctx.TypeChecker.GetTypeAtLocation(parent.Parent)
 					if parentType != nil {
 						propertySymbol := ctx.TypeChecker.GetSymbolAtLocation(node)
-						property := checker.Checker_getPropertyOfType(ctx.TypeChecker, parentType, node.Text())
+						property := ctx.TypeChecker.GetPropertyOfType(parentType, node.Text())
 
 						// Check alias chain first
 						isDeprecated, reason := searchForDeprecationInAliasesChain(propertySymbol, true)
@@ -573,8 +573,8 @@ var NoDeprecatedRule = rule.Rule{
 						}
 
 						// Check shorthand assignment value symbol
-						if propertySymbol != nil && propertySymbol.ValueDeclaration != nil {
-							valueSymbol := checker.Checker_GetShorthandAssignmentValueSymbol(ctx.TypeChecker, propertySymbol.ValueDeclaration)
+						if propertySymbol != nil && propertySymbol.ValueDeclaration() != nil {
+							valueSymbol := ctx.TypeChecker.GetShorthandAssignmentValueSymbol(propertySymbol.ValueDeclaration())
 							isDeprecated, reason = searchForDeprecationInAliasesChain(valueSymbol, true)
 							if isDeprecated {
 								return true, reason
@@ -776,7 +776,7 @@ var NoDeprecatedRule = rule.Rule{
 				propertyName = literalType.String()
 			}
 
-			property := checker.Checker_getPropertyOfType(ctx.TypeChecker, objectType, propertyName)
+			property := ctx.TypeChecker.GetPropertyOfType(objectType, propertyName)
 
 			isDeprecated, reason := getJsDocDeprecation(property)
 			if !isDeprecated {

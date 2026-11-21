@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/go-json-experiment/json"
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/compiler"
-	"github.com/microsoft/typescript-go/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/compiler"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
 )
 
 type TypeOrValueSpecifierFrom uint8
@@ -147,15 +147,15 @@ func typeMatchesStringSpecifier(
 	t *checker.Type,
 	names []string,
 ) bool {
-	alias := checker.Type_alias(t)
+	alias := t.Alias()
 	var symbol *ast.Symbol
 	if alias == nil {
-		symbol = checker.Type_symbol(t)
+		symbol = t.Symbol()
 	} else {
 		symbol = alias.Symbol()
 	}
 
-	if symbol != nil && slices.Contains(names, symbol.Name) {
+	if symbol != nil && slices.Contains(names, symbol.Name()) {
 		return true
 	}
 
@@ -171,15 +171,15 @@ func typeDeclaredInFile(
 	declarationFiles []*ast.SourceFile,
 	program *compiler.Program,
 ) bool {
-	cwd := program.Host().GetCurrentDirectory()
+	cwd := program.GetCurrentDirectory()
 	if relativePath == "" {
 		return Some(declarationFiles, func(f *ast.SourceFile) bool {
-			return strings.HasPrefix(f.FileName(), cwd)
+			return strings.HasPrefix(f.FileName().AsString(), cwd.AsString())
 		})
 	}
 	absPath := tspath.GetNormalizedAbsolutePath(relativePath, cwd)
 	return Some(declarationFiles, func(f *ast.SourceFile) bool {
-		return f.FileName() == absPath
+		return f.FileName().AsString() == absPath
 	})
 }
 
@@ -244,7 +244,7 @@ func findSourceFilePackageName(
 	program *compiler.Program,
 	sourceFile *ast.SourceFile,
 ) (string, bool) {
-	fileName := tspath.NormalizeSlashes(sourceFile.FileName())
+	fileName := tspath.NormalizeSlashes(sourceFile.FileName().AsString())
 	if !containsNodeModulesSegment(fileName) {
 		return "", false
 	}
@@ -264,7 +264,7 @@ func findPackageNameFromNearestPackageJSON(
 	currentDir := tspath.GetDirectoryPath(fileName)
 	for currentDir != "" && containsNodeModulesSegment(currentDir) {
 		packageJSONPath := tspath.CombinePaths(currentDir, "package.json")
-		if contents, ok := fs.ReadFile(packageJSONPath); ok {
+		if contents, ok := fs.ReadFile(tspath.RootedFilePathFromAbsolute(packageJSONPath)); ok {
 			var packageJSON struct {
 				Name string `json:"name"`
 			}
@@ -382,16 +382,16 @@ func typeMatchesSpecifier(
 		return false
 	}
 
-	symbol := checker.Type_symbol(t)
+	symbol := t.Symbol()
 	if symbol == nil {
-		alias := checker.Type_alias(t)
+		alias := t.Alias()
 		if alias != nil {
 			symbol = alias.Symbol()
 		}
 	}
 	var declarations []*ast.Node
 	if symbol != nil {
-		declarations = symbol.Declarations
+		declarations = symbol.Declarations()
 	}
 	declarationFiles := Map(declarations, func(d *ast.Node) *ast.SourceFile {
 		return ast.GetSourceFileOfNode(d)
@@ -428,7 +428,7 @@ func SymbolMatchesSpecifierNameAndSource(
 	if symbol == nil || !slices.Contains(specifier.Name, name) {
 		return false
 	}
-	declarations := symbol.Declarations
+	declarations := symbol.Declarations()
 	declarationFiles := Map(declarations, func(d *ast.Node) *ast.SourceFile {
 		return ast.GetSourceFileOfNode(d)
 	})
@@ -579,21 +579,21 @@ func valueMatchesSpecifier(
 		return true
 	}
 	symbol := typeChecker.GetSymbolAtLocation(node)
-	if symbol != nil && symbol.ValueDeclaration != nil && ast.IsShorthandPropertyAssignment(symbol.ValueDeclaration) {
-		symbol = checker.Checker_GetShorthandAssignmentValueSymbol(typeChecker, symbol.ValueDeclaration)
+	if symbol != nil && symbol.ValueDeclaration() != nil && ast.IsShorthandPropertyAssignment(symbol.ValueDeclaration()) {
+		symbol = typeChecker.GetShorthandAssignmentValueSymbol(symbol.ValueDeclaration())
 	}
-	if symbol != nil && symbol.ValueDeclaration != nil && ast.IsBindingElement(symbol.ValueDeclaration) {
-		declaration := symbol.ValueDeclaration
+	if symbol != nil && symbol.ValueDeclaration() != nil && ast.IsBindingElement(symbol.ValueDeclaration()) {
+		declaration := symbol.ValueDeclaration()
 		if ast.IsObjectBindingPattern(declaration.Parent) && declaration.AsBindingElement().DotDotDotToken == nil {
 			propertyName := getStaticName(declaration.PropertyNameOrName())
 			if propertyName == "" {
 				return false
 			}
 			sourceType := typeChecker.GetTypeAtLocation(declaration.Parent)
-			symbol = checker.Checker_getPropertyOfType(typeChecker, sourceType, propertyName)
+			symbol = typeChecker.GetPropertyOfType(sourceType, propertyName)
 		}
 	}
-	if symbol != nil && symbol.Flags&ast.SymbolFlagsAlias != 0 {
+	if symbol != nil && symbol.Flags()&ast.SymbolFlagsAlias != 0 {
 		symbol = typeChecker.GetAliasedSymbol(symbol)
 	}
 	return SymbolMatchesSpecifierNameAndSource(symbol, nodeName, specifier, program)

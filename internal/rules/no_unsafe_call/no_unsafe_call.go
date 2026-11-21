@@ -3,8 +3,8 @@ package no_unsafe_call
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -94,7 +94,7 @@ var NoUnsafeCallRule = rule.Rule{
 				callSignatures := utils.GetCallSignatures(ctx.TypeChecker, t)
 				if newCall {
 					if utils.Some(callSignatures, func(signature *checker.Signature) bool {
-						return !utils.IsIntrinsicVoidType(checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature))
+						return !utils.IsIntrinsicVoidType(ctx.TypeChecker.GetReturnTypeOfSignature(signature))
 					}) {
 						return
 					}

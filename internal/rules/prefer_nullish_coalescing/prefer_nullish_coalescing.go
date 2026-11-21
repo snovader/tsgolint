@@ -3,9 +3,9 @@ package prefer_nullish_coalescing
 import (
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -301,7 +301,7 @@ func isBooleanConstructorContext(ctx rule.RuleContext, node *ast.Node) bool {
 			symbol := ctx.TypeChecker.GetSymbolAtLocation(callExpr.Expression)
 			if symbol != nil {
 				// Check if this is the global Boolean (no user-defined declarations in source files)
-				for _, decl := range symbol.Declarations {
+				for _, decl := range symbol.Declarations() {
 					sf := ast.GetSourceFileOfNode(decl)
 					if sf != nil && !sf.IsDeclarationFile {
 						return false // User-defined Boolean
@@ -356,7 +356,7 @@ var PreferNullishCoalescingRule = rule.Rule{
 				return true
 			}
 			for _, part := range utils.UnionTypeParts(t) {
-				flags := checker.Type_flags(part)
+				flags := part.Flags()
 				if flags&checker.TypeFlagsNullable != 0 {
 					return true
 				}
@@ -439,7 +439,7 @@ var PreferNullishCoalescingRule = rule.Rule{
 			}
 
 			t := ctx.TypeChecker.GetTypeAtLocation(targetNode)
-			flags := checker.Type_flags(t)
+			flags := t.Flags()
 
 			// Skip if the type is any or unknown
 			if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown) != 0 {
@@ -450,7 +450,7 @@ var PreferNullishCoalescingRule = rule.Rule{
 			hasNullType := false
 			hasUndefinedType := false
 			for _, part := range utils.UnionTypeParts(t) {
-				partFlags := checker.Type_flags(part)
+				partFlags := part.Flags()
 				if partFlags&checker.TypeFlagsNull != 0 {
 					hasNullType = true
 				}

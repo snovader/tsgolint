@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -84,7 +84,7 @@ func isThenableTypeWithVoidValue(typeChecker *checker.Checker, node *ast.Node, t
 		return false
 	}
 
-	awaitedType := checker.Checker_getAwaitedType(typeChecker, t)
+	awaitedType := typeChecker.GetAwaitedType(t)
 	if awaitedType == nil || awaitedType == t {
 		return false
 	}
@@ -103,7 +103,7 @@ func isReturnVoidOrThenableVoid(ctx rule.RuleContext, functionNode *ast.Node) bo
 	isAsyncFunction := functionFlags&ast.FunctionFlagsAsync != 0
 
 	return utils.Some(callSignatures, func(signature *checker.Signature) bool {
-		returnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+		returnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 		if isAsyncFunction {
 			return isThenableTypeWithVoidValue(ctx.TypeChecker, functionNode, returnType, map[*checker.Type]struct{}{})
 		}
@@ -122,7 +122,7 @@ func getHasReturnValue(ctx rule.RuleContext, node *ast.ReturnStatement, treatUnd
 	}
 
 	returnValueType := ctx.TypeChecker.GetTypeAtLocation(node.Expression)
-	if checker.Type_flags(returnValueType) == checker.TypeFlagsUndefined {
+	if returnValueType.Flags() == checker.TypeFlagsUndefined {
 		return false
 	}
 

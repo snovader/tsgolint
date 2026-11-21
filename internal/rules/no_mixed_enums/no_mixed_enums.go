@@ -1,8 +1,8 @@
 package no_mixed_enums
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -51,7 +51,7 @@ var NoMixedEnumsRule = rule.Rule{
 		getDesiredTypeForDefinition := func(node *ast.Node) allowedType {
 			symbol := ctx.TypeChecker.GetSymbolAtLocation(node.Name())
 
-			declaration := symbol.Declarations[0]
+			declaration := symbol.Declarations()[0]
 
 			return getMemberType(declaration.Members()[0])
 		}

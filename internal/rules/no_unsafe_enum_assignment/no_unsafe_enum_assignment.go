@@ -3,8 +3,8 @@ package no_unsafe_enum_assignment
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -123,7 +123,7 @@ var NoUnsafeEnumAssignmentRule = rule.Rule{
 						if len(mismatches) > 0 {
 							report(argument, "unsafeEnumArgument", mismatches)
 						}
-						if checker.TupleType_combinedFlags(spreadType.Target().AsTupleType())&checker.ElementFlagsVariable != 0 {
+						if spreadType.Target().AsTupleType().CombinedFlags()&checker.ElementFlagsVariable != 0 {
 							signature.consumed = true
 						}
 						continue
@@ -143,11 +143,11 @@ var NoUnsafeEnumAssignmentRule = rule.Rule{
 			if signature == nil {
 				return
 			}
-			receiver := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+			receiver := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 			senderType := ctx.TypeChecker.GetTypeAtLocation(sender)
 			if ast.IsAsyncFunction(function) {
-				receiver = checker.Checker_getAwaitedType(ctx.TypeChecker, receiver)
-				senderType = checker.Checker_getAwaitedType(ctx.TypeChecker, senderType)
+				receiver = ctx.TypeChecker.GetAwaitedType(receiver)
+				senderType = ctx.TypeChecker.GetAwaitedType(senderType)
 			}
 			if receiver != nil && senderType != nil {
 				checkAssignment(receiver, sender, reporting, "unsafeEnumReturn", senderType)
@@ -206,8 +206,8 @@ var NoUnsafeEnumAssignmentRule = rule.Rule{
 								if ast.IsStatic(node) {
 									heritageNode = heritage.Expression()
 								}
-								if symbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(heritageNode), memberName); symbol != nil {
-									heritageTypes = append(heritageTypes, checker.Checker_getTypeOfSymbol(ctx.TypeChecker, symbol))
+								if symbol := ctx.TypeChecker.GetPropertyOfType(ctx.TypeChecker.GetTypeAtLocation(heritageNode), memberName); symbol != nil {
+									heritageTypes = append(heritageTypes, ctx.TypeChecker.GetTypeOfSymbol(symbol))
 								}
 							}
 						}
@@ -325,7 +325,7 @@ var NoUnsafeEnumAssignmentRule = rule.Rule{
 					return
 				}
 				var receivers []*checker.Type
-				for _, declaration := range symbol.Declarations {
+				for _, declaration := range symbol.Declarations() {
 					receivers = append(receivers, mappedKeyConstraintTypes(ctx.TypeChecker, declaration)...)
 				}
 				if len(receivers) == 0 {
@@ -333,7 +333,7 @@ var NoUnsafeEnumAssignmentRule = rule.Rule{
 				}
 				sender := ctx.TypeChecker.GetTypeAtLocation(expr.ArgumentExpression)
 				if utils.Every(receivers, func(receiver *checker.Type) bool {
-					return c.mismatch(sender, receiver) || !checker.Checker_isTypeAssignableTo(ctx.TypeChecker, sender, receiver)
+					return c.mismatch(sender, receiver) || !ctx.TypeChecker.IsTypeAssignableTo(sender, receiver)
 				}) {
 					report(expr.ArgumentExpression, "unsafeEnumAccess", receivers)
 				}

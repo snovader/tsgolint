@@ -3,9 +3,9 @@ package prefer_optional_chain
 import (
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -3333,7 +3333,7 @@ func (processor *chainProcessor) generateAndChainFixAndReport(node *ast.Node, ch
 		if hasNonTypeofAfterFirst && chain[0].comparedExpr != nil {
 			typeofTarget := chain[0].comparedExpr
 			symbol := processor.ctx.TypeChecker.GetSymbolAtLocation(typeofTarget)
-			isUndeclared := symbol == nil || len(symbol.Declarations) == 0
+			isUndeclared := symbol == nil || len(symbol.Declarations()) == 0
 
 			if isUndeclared {
 				effectiveChainStart = 1

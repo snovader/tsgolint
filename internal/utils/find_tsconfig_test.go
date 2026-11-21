@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/microsoft/typescript-go/shim/vfs"
-	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/osvfs"
 	"github.com/typescript-eslint/tsgolint/internal/rules/fixtures"
 	"gotest.tools/v3/assert"
 )
@@ -17,8 +18,11 @@ type caseSensitivityFS struct {
 	caseSensitive bool
 }
 
-func (fs caseSensitivityFS) UseCaseSensitiveFileNames() bool {
-	return fs.caseSensitive
+func (fs caseSensitivityFS) CaseSensitivity() tspath.CaseSensitivity {
+	if fs.caseSensitive {
+		return tspath.CaseSensitive
+	}
+	return tspath.CaseInsensitive
 }
 
 func TestFindTsConfigParallel_CaseInsensitivePaths(t *testing.T) {

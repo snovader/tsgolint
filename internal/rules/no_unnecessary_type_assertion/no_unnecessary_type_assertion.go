@@ -3,10 +3,10 @@ package no_unnecessary_type_assertion
 import (
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -127,7 +127,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				decl.ExclamationToken == nil &&
 				decl.Type != nil {
 				// check if the defined variable type has changed since assignment
-				declarationType := checker.Checker_getTypeFromTypeNode(ctx.TypeChecker, declaration.Type())
+				declarationType := ctx.TypeChecker.GetTypeFromTypeNode(declaration.Type())
 				t := utils.GetConstrainedTypeAtLocation(ctx.TypeChecker, node)
 				if declarationType == t &&
 					// `declare`s are never narrowed, so never skip them
@@ -170,13 +170,13 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 		}
 
 		getTypeArguments := func(t *checker.Type) []*checker.Type {
-			if alias := checker.Type_alias(t); alias != nil && len(alias.TypeArguments()) > 0 {
+			if alias := t.Alias(); alias != nil && len(alias.TypeArguments()) > 0 {
 				return alias.TypeArguments()
 			}
-			if checker.Type_objectFlags(t)&checker.ObjectFlagsReference == 0 {
+			if t.ObjectFlags()&checker.ObjectFlagsReference == 0 {
 				return nil
 			}
-			return checker.Checker_getTypeArguments(ctx.TypeChecker, t)
+			return ctx.TypeChecker.GetTypeArguments(t)
 		}
 
 		var typeContains func(t *checker.Type, predicate func(*checker.Type) bool, seenTypes map[*checker.Type]struct{}, activeSignatures map[*checker.Signature]struct{}) bool
@@ -215,12 +215,12 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				}
 				activeSignatures[signatureIdentity] = struct{}{}
 
-				for _, param := range checker.Signature_parameters(sig) {
-					if typeContains(checker.Checker_getTypeOfSymbol(ctx.TypeChecker, param), predicate, seenTypes, activeSignatures) {
+				for _, param := range sig.Parameters() {
+					if typeContains(ctx.TypeChecker.GetTypeOfSymbol(param), predicate, seenTypes, activeSignatures) {
 						return true
 					}
 				}
-				if typeContains(checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, sig), predicate, seenTypes, activeSignatures) {
+				if typeContains(ctx.TypeChecker.GetReturnTypeOfSignature(sig), predicate, seenTypes, activeSignatures) {
 					return true
 				}
 				delete(activeSignatures, signatureIdentity)
@@ -242,26 +242,26 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 
 		hasIndexSignature := func(t *checker.Type) bool {
 			return slices.ContainsFunc(utils.UnionTypeParts(t), func(part *checker.Type) bool {
-				return len(checker.Checker_getIndexInfosOfType(ctx.TypeChecker, part)) > 0
+				return len(ctx.TypeChecker.GetIndexInfosOfType(part)) > 0
 			})
 		}
 
 		hasSameProperties := func(uncast, cast *checker.Type) bool {
-			uncastProps := checker.Checker_getPropertiesOfType(ctx.TypeChecker, uncast)
-			castProps := checker.Checker_getPropertiesOfType(ctx.TypeChecker, cast)
+			uncastProps := ctx.TypeChecker.GetPropertiesOfType(uncast)
+			castProps := ctx.TypeChecker.GetPropertiesOfType(cast)
 			if len(uncastProps) != len(castProps) {
 				return false
 			}
 
 			castPropsByName := make(map[string]*ast.Symbol, len(castProps))
 			for _, prop := range castProps {
-				castPropsByName[prop.Name] = prop
+				castPropsByName[prop.Name()] = prop
 			}
 
 			for _, prop := range uncastProps {
-				castProp := castPropsByName[prop.Name]
+				castProp := castPropsByName[prop.Name()]
 				if castProp == nil ||
-					checker.Checker_isReadonlySymbol(ctx.TypeChecker, prop) != checker.Checker_isReadonlySymbol(ctx.TypeChecker, castProp) {
+					ctx.TypeChecker.IsReadonlySymbol(prop) != ctx.TypeChecker.IsReadonlySymbol(castProp) {
 					return false
 				}
 			}
@@ -269,8 +269,8 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 		}
 
 		areMutuallyAssignable := func(a, b *checker.Type) bool {
-			return checker.Checker_isTypeAssignableTo(ctx.TypeChecker, a, b) &&
-				checker.Checker_isTypeAssignableTo(ctx.TypeChecker, b, a)
+			return ctx.TypeChecker.IsTypeAssignableTo(a, b) &&
+				ctx.TypeChecker.IsTypeAssignableTo(b, a)
 		}
 
 		areUnionPartsEquivalentIgnoringUndefined := func(uncast, cast *checker.Type) bool {
@@ -296,10 +296,10 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 
 		isEmptyObjectType := func(t *checker.Type) bool {
 			return utils.IsTypeFlagSet(t, checker.TypeFlagsNonPrimitive) ||
-				(len(checker.Checker_getPropertiesOfType(ctx.TypeChecker, t)) == 0 &&
+				(len(ctx.TypeChecker.GetPropertiesOfType(t)) == 0 &&
 					len(utils.GetCallSignatures(ctx.TypeChecker, t)) == 0 &&
 					len(utils.GetConstructSignatures(ctx.TypeChecker, t)) == 0 &&
-					len(checker.Checker_getIndexInfosOfType(ctx.TypeChecker, t)) == 0)
+					len(ctx.TypeChecker.GetIndexInfosOfType(t)) == 0)
 		}
 
 		hasPhantomTypeArguments := func(t *checker.Type) bool {
@@ -407,8 +407,8 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 			if isConceptuallyLiteral(expression) &&
 				(!ast.IsObjectLiteralExpression(expression) ||
 					len(expression.AsObjectLiteralExpression().Properties.Nodes) == 0 ||
-					slices.ContainsFunc(checker.Checker_getPropertiesOfType(ctx.TypeChecker, cast), func(prop *ast.Symbol) bool {
-						return isTypeLiteral(checker.Checker_getTypeOfSymbol(ctx.TypeChecker, prop))
+					slices.ContainsFunc(ctx.TypeChecker.GetPropertiesOfType(cast), func(prop *ast.Symbol) bool {
+						return isTypeLiteral(ctx.TypeChecker.GetTypeOfSymbol(prop))
 					})) {
 				return false
 			}
@@ -441,7 +441,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 					otherPart != nil &&
 					isEmptyObjectType(otherPart) &&
 					!containsTypeVariable(otherPart) {
-					constraint := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, uncast)
+					constraint := ctx.TypeChecker.GetBaseConstraintOfType(uncast)
 					return constraint != nil && !utils.IsNullableType(ctx.TypeChecker, constraint)
 				}
 				return false
@@ -603,7 +603,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				return false
 			}
 
-			params := checker.Signature_parameters(signature)
+			params := signature.Parameters()
 			if len(params) == 0 {
 				return false
 			}
@@ -613,8 +613,8 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				paramIndex = len(params) - 1
 			}
 			param := params[paramIndex]
-			paramType := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, param)
-			if valueDeclaration := param.ValueDeclaration; valueDeclaration != nil &&
+			paramType := ctx.TypeChecker.GetTypeOfSymbol(param)
+			if valueDeclaration := param.ValueDeclaration(); valueDeclaration != nil &&
 				valueDeclaration.Kind == ast.KindParameter &&
 				valueDeclaration.AsParameterDeclaration().DotDotDotToken != nil {
 				if typeArguments := getTypeArguments(paramType); len(typeArguments) > 0 {
@@ -628,7 +628,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 			for _, elementIndex := range elementPath {
 				var elementType *checker.Type
 				if checker.IsTupleType(paramType) {
-					typeArguments := checker.Checker_getTypeArguments(ctx.TypeChecker, paramType)
+					typeArguments := ctx.TypeChecker.GetTypeArguments(paramType)
 					if len(typeArguments) > 0 {
 						elementType = typeArguments[min(elementIndex, len(typeArguments)-1)]
 					}
@@ -645,26 +645,28 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 		}
 
 		genericsMismatch := func(uncast, contextual *checker.Type) bool {
-			return slices.ContainsFunc(checker.Checker_getPropertiesOfType(ctx.TypeChecker, contextual), func(prop *ast.Symbol) bool {
-				contextualSigs := checker.Checker_getSignaturesOfType(
-					ctx.TypeChecker,
-					checker.Checker_getTypeOfSymbol(ctx.TypeChecker, prop),
-					checker.SignatureKindCall,
-				)
+			return slices.ContainsFunc(ctx.TypeChecker.GetPropertiesOfType(contextual), func(prop *ast.Symbol) bool {
+				contextualSigs :=
+					ctx.TypeChecker.GetSignaturesOfType(
+
+						ctx.TypeChecker.GetTypeOfSymbol(prop),
+						checker.SignatureKindCall,
+					)
 				if !slices.ContainsFunc(contextualSigs, hasTypeParams) {
 					return false
 				}
 
-				uncastProp := checker.Checker_getPropertyOfType(ctx.TypeChecker, uncast, prop.Name)
+				uncastProp := ctx.TypeChecker.GetPropertyOfType(uncast, prop.Name())
 				if uncastProp == nil {
 					return true
 				}
 
-				uncastSigs := checker.Checker_getSignaturesOfType(
-					ctx.TypeChecker,
-					checker.Checker_getTypeOfSymbol(ctx.TypeChecker, uncastProp),
-					checker.SignatureKindCall,
-				)
+				uncastSigs :=
+					ctx.TypeChecker.GetSignaturesOfType(
+
+						ctx.TypeChecker.GetTypeOfSymbol(uncastProp),
+						checker.SignatureKindCall,
+					)
 				return !slices.ContainsFunc(uncastSigs, hasTypeParams)
 			})
 		}
@@ -676,7 +678,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 			}
 
 			parent := parentThroughParens(node)
-			calleeType := checker.Checker_GetNonNullableType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(parent.Expression()))
+			calleeType := ctx.TypeChecker.GetNonNullableType(ctx.TypeChecker.GetTypeAtLocation(parent.Expression()))
 			signatures := ctx.TypeChecker.GetCallSignatures(calleeType)
 			if len(signatures) <= 1 {
 				return false
@@ -688,8 +690,8 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				if argIndex >= len(params) {
 					return true
 				}
-				paramType := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, params[argIndex])
-				if valueDeclaration := params[argIndex].ValueDeclaration; valueDeclaration != nil &&
+				paramType := ctx.TypeChecker.GetTypeOfSymbol(params[argIndex])
+				if valueDeclaration := params[argIndex].ValueDeclaration(); valueDeclaration != nil &&
 					valueDeclaration.Kind == ast.KindParameter &&
 					valueDeclaration.AsParameterDeclaration().DotDotDotToken != nil {
 					if typeArguments := getTypeArguments(paramType); len(typeArguments) > 0 {
@@ -706,7 +708,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 			if slices.ContainsFunc(paramTypes, func(paramType *checker.Type) bool { return paramType != firstParamType }) {
 				uncastType := ctx.TypeChecker.GetTypeAtLocation(node.Expression())
 				return slices.ContainsFunc(paramTypes, func(paramType *checker.Type) bool {
-					return !checker.Checker_isTypeAssignableTo(ctx.TypeChecker, uncastType, paramType)
+					return !ctx.TypeChecker.IsTypeAssignableTo(uncastType, paramType)
 				})
 			}
 			return false
@@ -733,12 +735,12 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				if propContextualType == nil {
 					return true
 				}
-				nonNullableContextualType := checker.Checker_GetNonNullableType(ctx.TypeChecker, propContextualType)
+				nonNullableContextualType := ctx.TypeChecker.GetNonNullableType(propContextualType)
 				if utils.IsUnionType(nonNullableContextualType) {
 					return true
 				}
 				uncastType := ctx.TypeChecker.GetTypeAtLocation(node.Expression())
-				return !checker.Checker_isTypeAssignableTo(ctx.TypeChecker, uncastType, nonNullableContextualType)
+				return !ctx.TypeChecker.IsTypeAssignableTo(uncastType, nonNullableContextualType)
 			}
 			objectParent := parentThroughParens(objectExpr)
 			// Also preserve casts whose property context comes from another assertion.
@@ -979,7 +981,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				// accept their contextual constraints without accepting the direct cast.
 				intermediateType := ctx.TypeChecker.GetTypeAtLocation(innerExpression)
 				if (isTypeAny(intermediateType) || isTypeUnknown(intermediateType)) &&
-					checker.Checker_isTypeAssignableTo(ctx.TypeChecker, originalType, contextualType) {
+					ctx.TypeChecker.IsTypeAssignableTo(originalType, contextualType) {
 					return "contextuallyUnnecessary"
 				}
 			}
@@ -1046,8 +1048,8 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 				// typescript-go may resolve a conditional type at the assertion site.
 				// Retain its declared form when deciding whether the cast changed it.
 				if symbol := ctx.TypeChecker.GetSymbolAtLocation(expressionForType); symbol != nil {
-					symbolType := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, symbol)
-					if symbolType != nil && checker.Type_flags(symbolType)&checker.TypeFlagsConditional != 0 {
+					symbolType := ctx.TypeChecker.GetTypeOfSymbol(symbol)
+					if symbolType != nil && symbolType.Flags()&checker.TypeFlagsConditional != 0 {
 						uncastType = symbolType
 					}
 				}
@@ -1101,7 +1103,7 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 					anyInvolvedInContextualCheck &&
 					!hasPhantomTypeArgumentMismatch(node, uncastType, contextualType) &&
 					(castIsAny || !genericsMismatch(uncastType, contextualType)) &&
-					(contextualTypeIsAny || checker.Checker_isTypeAssignableTo(ctx.TypeChecker, uncastType, contextualType)) &&
+					(contextualTypeIsAny || ctx.TypeChecker.IsTypeAssignableTo(uncastType, contextualType)) &&
 					!isNullishLiteralToUnion(node, castType)
 
 				if isContextuallyUnnecessary {
@@ -1168,14 +1170,14 @@ var NoUnnecessaryTypeAssertionRule = rule.Rule{
 
 					var tFlags checker.TypeFlags
 					for _, part := range utils.UnionTypeParts(constrainedType) {
-						tFlags |= checker.Type_flags(part)
+						tFlags |= part.Flags()
 					}
 
 					contextualType := utils.GetContextualType(ctx.TypeChecker, node)
 					if contextualType != nil {
 						var contextualFlags checker.TypeFlags
 						for _, part := range utils.UnionTypeParts(contextualType) {
-							contextualFlags |= checker.Type_flags(part)
+							contextualFlags |= part.Flags()
 						}
 
 						if tFlags&checker.TypeFlagsUnknown != 0 && contextualFlags&checker.TypeFlagsUnknown == 0 {

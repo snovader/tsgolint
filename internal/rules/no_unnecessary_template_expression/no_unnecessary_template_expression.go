@@ -3,10 +3,10 @@ package no_unnecessary_template_expression
 import (
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/jsnum"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/jsnum"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -238,8 +238,8 @@ var NoUnnecessaryTemplateExpressionRule = rule.Rule{
 
 		isEnumMemberType := func(t *checker.Type) bool {
 			return utils.TypeRecurser(t, func(t *checker.Type) bool {
-				symbol := checker.Type_symbol(t)
-				return symbol != nil && symbol.ValueDeclaration != nil && ast.IsEnumMember(symbol.ValueDeclaration)
+				symbol := t.Symbol()
+				return symbol != nil && symbol.ValueDeclaration() != nil && ast.IsEnumMember(symbol.ValueDeclaration())
 			})
 		}
 

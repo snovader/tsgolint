@@ -1,9 +1,9 @@
 package non_nullable_type_assertion_style
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -28,7 +28,7 @@ var NonNullableTypeAssertionStyleRule = rule.Rule{
 
 		couldBeNullable := func(t *checker.Type) bool {
 			if utils.IsTypeParameter(t) {
-				t = checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, t)
+				t = ctx.TypeChecker.GetBaseConstraintOfType(t)
 				if t == nil {
 					return true
 				}

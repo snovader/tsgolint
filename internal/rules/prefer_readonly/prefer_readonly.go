@@ -3,9 +3,9 @@ package prefer_readonly
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -259,11 +259,11 @@ func (scope *classScope) getTypeToClassRelation(t *checker.Type) typeToClassRela
 		return scope.getTypeToClassRelation(types[0])
 	}
 
-	if checker.Type_symbol(t) == nil || !typeIsOrHasBaseType(scope.typeChecker, t, scope.classType) {
+	if t.Symbol() == nil || !typeIsOrHasBaseType(scope.typeChecker, t, scope.classType) {
 		return typeToClassRelationNone
 	}
 
-	typeIsClass := utils.IsObjectType(t) && checker.Type_objectFlags(t)&checker.ObjectFlagsAnonymous != 0
+	typeIsClass := utils.IsObjectType(t) && t.ObjectFlags()&checker.ObjectFlagsAnonymous != 0
 	if typeIsClass {
 		return typeToClassRelationClass
 	}
@@ -276,7 +276,7 @@ func typeIsOrHasBaseType(typeChecker *checker.Checker, t *checker.Type, baseType
 		return false
 	}
 
-	baseSymbol := checker.Type_symbol(baseType)
+	baseSymbol := baseType.Symbol()
 	if baseSymbol == nil {
 		return false
 	}
@@ -296,15 +296,15 @@ func typeIsOrHasBaseType(typeChecker *checker.Checker, t *checker.Type, baseType
 		}
 		seen[current] = struct{}{}
 
-		if checker.Type_symbol(current) == baseSymbol {
+		if current.Symbol() == baseSymbol {
 			return true
 		}
 
-		if !utils.IsObjectType(current) || checker.Type_objectFlags(current)&checker.ObjectFlagsClassOrInterface == 0 {
+		if !utils.IsObjectType(current) || current.ObjectFlags()&checker.ObjectFlagsClassOrInterface == 0 {
 			continue
 		}
 
-		for _, base := range checker.Checker_getBaseTypes(typeChecker, current) {
+		for _, base := range typeChecker.GetBaseTypes(current) {
 			queue = append(queue, base)
 		}
 	}
@@ -349,7 +349,7 @@ func getTypeAnnotationForViolatingNode(
 		return ""
 	}
 
-	if checker.Type_flags(initializerType)&checker.TypeFlagsEnumLiteral == 0 {
+	if initializerType.Flags()&checker.TypeFlagsEnumLiteral == 0 {
 		return annotation
 	}
 
@@ -368,7 +368,7 @@ func getTypeAnnotationForViolatingNode(
 		return ""
 	}
 
-	definitionType := checker.Checker_getDeclaredTypeOfSymbol(ctx.TypeChecker, symbol)
+	definitionType := ctx.TypeChecker.GetDeclaredTypeOfSymbol(symbol)
 	if definitionType != violatingType {
 		return ""
 	}
@@ -427,7 +427,7 @@ var PreferReadonlyRule = rule.Rule{
 						violatingType := ctx.TypeChecker.GetTypeAtLocation(violatingNode)
 						initializerType := ctx.TypeChecker.GetTypeAtLocation(property.Initializer)
 
-						if violatingType != nil && initializerType != nil && violatingType != initializerType && checker.Type_flags(initializerType)&checker.TypeFlagsLiteral != 0 {
+						if violatingType != nil && initializerType != nil && violatingType != initializerType && initializerType.Flags()&checker.TypeFlagsLiteral != 0 {
 							typeAnnotation := getTypeAnnotationForViolatingNode(ctx, violatingNode, violatingType, initializerType)
 							if typeAnnotation != "" {
 								fixes = append(fixes, rule.RuleFixInsertAfter(nameNode, ": "+typeAnnotation))

@@ -20,9 +20,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -198,7 +198,7 @@ func typeNameForNodeDiagnostic(typeChecker *checker.Checker, t *checker.Type, no
 // For these types, we cannot determine their truthiness, nullishness, or overlap
 // with other types at compile time, so we conservatively avoid reporting them.
 func isIndeterminateType(t *checker.Type) bool {
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 	// Note: We don't include TypeFlagsIndexedAccess because TypeScript resolves
 	// indexed access types like T[K] to concrete types (e.g., number, string)
 	// TypeFlagsIndex is for the index type operator (keyof T), which is indeterminate
@@ -219,7 +219,7 @@ func isIndeterminateType(t *checker.Type) bool {
 // Note: This is different from isNullishType which returns true if a type
 // CAN BE nullish (including unions like string | null).
 func isAlwaysNullishType(t *checker.Type) bool {
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 	return flags&(checker.TypeFlagsNull|checker.TypeFlagsUndefined|checker.TypeFlagsVoid) != 0
 }
 
@@ -268,7 +268,7 @@ func toStaticValue(t *checker.Type) (any, bool) { //nolint:unparam // the value 
 		return nil, false
 	}
 
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 	if flags&checker.TypeFlagsBooleanLiteral != 0 {
 		return isTrueLiteralTypeValue(t)
 	}
@@ -299,7 +299,7 @@ func toStaticValue(t *checker.Type) (any, bool) { //nolint:unparam // the value 
 }
 
 func isTrueLiteralTypeValue(t *checker.Type) (bool, bool) {
-	if t == nil || checker.Type_flags(t)&checker.TypeFlagsBooleanLiteral == 0 {
+	if t == nil || t.Flags()&checker.TypeFlagsBooleanLiteral == 0 {
 		return false, false
 	}
 
@@ -343,37 +343,37 @@ var NoUnnecessaryConditionRule = rule.Rule{
 		loopConditionMode := normalizeAllowConstantLoopConditions(opts.AllowConstantLoopConditions)
 
 		resolveIndexedAccessType := func(t *checker.Type) *checker.Type {
-			if t == nil || checker.Type_flags(t)&checker.TypeFlagsIndexedAccess == 0 {
+			if t == nil || t.Flags()&checker.TypeFlagsIndexedAccess == 0 {
 				return t
 			}
 
 			indexedAccess := t.AsIndexedAccessType()
-			objectType := checker.IndexedAccessType_objectType(indexedAccess)
-			indexType := checker.IndexedAccessType_indexType(indexedAccess)
+			objectType := indexedAccess.ObjectType()
+			indexType := indexedAccess.IndexType()
 			if objectType == nil || indexType == nil {
 				return t
 			}
 
-			if constrainedObject := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, objectType); constrainedObject != nil {
+			if constrainedObject := ctx.TypeChecker.GetBaseConstraintOfType(objectType); constrainedObject != nil {
 				objectType = constrainedObject
 			}
-			if constrainedIndex := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, indexType); constrainedIndex != nil {
+			if constrainedIndex := ctx.TypeChecker.GetBaseConstraintOfType(indexType); constrainedIndex != nil {
 				indexType = constrainedIndex
 			}
 
-			if checker.Type_flags(indexType)&checker.TypeFlagsStringLiteral != 0 && indexType.IsStringLiteral() {
+			if indexType.Flags()&checker.TypeFlagsStringLiteral != 0 && indexType.IsStringLiteral() {
 				if literal := indexType.AsLiteralType(); literal != nil {
 					if propertyName, ok := literal.Value().(string); ok {
-						if propType := checker.Checker_getTypeOfPropertyOfType(ctx.TypeChecker, objectType, propertyName); propType != nil {
+						if propType := ctx.TypeChecker.GetTypeOfPropertyOfType(objectType, propertyName); propType != nil {
 							return propType
 						}
 					}
 				}
 			}
 
-			if checker.Type_flags(indexType)&checker.TypeFlagsNumberLiteral != 0 && indexType.IsNumberLiteral() {
+			if indexType.Flags()&checker.TypeFlagsNumberLiteral != 0 && indexType.IsNumberLiteral() {
 				if literal := indexType.AsLiteralType(); literal != nil {
-					if propType := checker.Checker_getTypeOfPropertyOfType(ctx.TypeChecker, objectType, literal.String()); propType != nil {
+					if propType := ctx.TypeChecker.GetTypeOfPropertyOfType(objectType, literal.String()); propType != nil {
 						return propType
 					}
 				}
@@ -381,7 +381,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 
 			indexParts := utils.UnionTypeParts(indexType)
 			if len(indexParts) != 0 && slices.ContainsFunc(indexParts, func(part *checker.Type) bool {
-				return checker.Type_flags(part)&checker.TypeFlagsStringLike != 0
+				return part.Flags()&checker.TypeFlagsStringLike != 0
 			}) {
 				if stringIndexType := ctx.TypeChecker.GetStringIndexType(objectType); stringIndexType != nil {
 					return stringIndexType
@@ -389,7 +389,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 			}
 
 			if len(indexParts) != 0 && slices.ContainsFunc(indexParts, func(part *checker.Type) bool {
-				return checker.Type_flags(part)&checker.TypeFlagsNumberLike != 0
+				return part.Flags()&checker.TypeFlagsNumberLike != 0
 			}) {
 				if numberIndexType := ctx.TypeChecker.GetNumberIndexType(objectType); numberIndexType != nil {
 					return numberIndexType
@@ -413,8 +413,8 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				return resolveIndexedAccessType(constraintType)
 			}
 
-			if checker.Type_flags(nodeType)&checker.TypeFlagsConditional != 0 {
-				if constraint := checker.Checker_getBaseConstraintOfType(ctx.TypeChecker, nodeType); constraint != nil {
+			if nodeType.Flags()&checker.TypeFlagsConditional != 0 {
+				if constraint := ctx.TypeChecker.GetBaseConstraintOfType(nodeType); constraint != nil {
 					nodeType = constraint
 				}
 			}
@@ -428,7 +428,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 			}
 
 			for _, part := range utils.UnionTypeParts(nodeType) {
-				if checker.Checker_isArrayType(ctx.TypeChecker, part) {
+				if ctx.TypeChecker.IsArrayType(part) {
 					return true
 				}
 			}
@@ -473,7 +473,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 
 		isConditionalAlwaysNecessary := func(t *checker.Type) bool {
 			for _, part := range utils.UnionTypeParts(t) {
-				flags := checker.Type_flags(part)
+				flags := part.Flags()
 				if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsTypeVariable|checker.TypeFlagsConditional) != 0 {
 					return true
 				}
@@ -545,11 +545,11 @@ var NoUnnecessaryConditionRule = rule.Rule{
 		// When the indexed access can't be resolved to a concrete constraint,
 		// callers should skip conservatively.
 		constrainIndexedAccessType := func(t *checker.Type) (*checker.Type, bool) {
-			if t == nil || !isIndexedAccessFlags(checker.Type_flags(t)) {
+			if t == nil || !isIndexedAccessFlags(t.Flags()) {
 				return t, false
 			}
 			constraintType := resolveIndexedAccessType(t)
-			if constraintType == nil || isIndexedAccessFlags(checker.Type_flags(constraintType)) {
+			if constraintType == nil || isIndexedAccessFlags(constraintType.Flags()) {
 				return nil, true
 			}
 			return constraintType, false
@@ -560,7 +560,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				return "", false
 			}
 
-			flags := checker.Type_flags(t)
+			flags := t.Flags()
 			if flags&checker.TypeFlagsStringLiteral != 0 && t.IsStringLiteral() {
 				literal := t.AsLiteralType()
 				if literal != nil {
@@ -596,14 +596,14 @@ var NoUnnecessaryConditionRule = rule.Rule{
 			}
 
 			if propertyName, ok := getPropertyNameFromLiteralType(propertyType); ok {
-				propType := checker.Checker_getTypeOfPropertyOfType(ctx.TypeChecker, objType, propertyName)
+				propType := ctx.TypeChecker.GetTypeOfPropertyOfType(objType, propertyName)
 				if propType != nil {
 					return isNullishType(propType)
 				}
 			}
 
 			propertyTypeName := utils.GetTypeName(ctx.TypeChecker, propertyType)
-			for _, info := range checker.Checker_getIndexInfosOfType(ctx.TypeChecker, objType) {
+			for _, info := range ctx.TypeChecker.GetIndexInfosOfType(objType) {
 				if utils.GetTypeName(ctx.TypeChecker, info.KeyType()) == propertyTypeName {
 					return true
 				}
@@ -723,15 +723,15 @@ var NoUnnecessaryConditionRule = rule.Rule{
 			}
 
 			// Try to get the property directly first
-			prop := checker.Checker_getPropertyOfType(ctx.TypeChecker, nonNullishBase, propName)
+			prop := ctx.TypeChecker.GetPropertyOfType(nonNullishBase, propName)
 			if prop != nil {
 				return ctx.TypeChecker.GetTypeOfSymbol(prop)
 			}
 
 			// For mapped types, try the apparent type which may have the property
-			apparentType := checker.Checker_getApparentType(ctx.TypeChecker, nonNullishBase)
+			apparentType := ctx.TypeChecker.GetApparentType(nonNullishBase)
 			if apparentType != nil && apparentType != nonNullishBase {
-				prop = checker.Checker_getPropertyOfType(ctx.TypeChecker, apparentType, propName)
+				prop = ctx.TypeChecker.GetPropertyOfType(apparentType, propName)
 				if prop != nil {
 					return ctx.TypeChecker.GetTypeOfSymbol(prop)
 				}
@@ -751,14 +751,14 @@ var NoUnnecessaryConditionRule = rule.Rule{
 			// GetStringIndexType may return nil. Check if the type is a mapped type
 			// and look at all its properties to find one that matches.
 			if stringIndexType == nil {
-				objectFlags := checker.Type_objectFlags(nonNullishBase)
+				objectFlags := nonNullishBase.ObjectFlags()
 				if objectFlags&checker.ObjectFlagsMapped != 0 {
 					// This is a mapped type - get all its properties
-					properties := checker.Checker_getPropertiesOfType(ctx.TypeChecker, nonNullishBase)
+					properties := ctx.TypeChecker.GetPropertiesOfType(nonNullishBase)
 					for _, p := range properties {
-						if p.Name == propName {
+						if p.Name() == propName {
 							// Found the property - check if it's optional
-							if p.Flags&ast.SymbolFlagsOptional == 0 {
+							if p.Flags()&ast.SymbolFlagsOptional == 0 {
 								// Non-optional property - use its type
 								return ctx.TypeChecker.GetTypeOfSymbol(p)
 							}
@@ -897,7 +897,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 					continue
 				}
 
-				propType := checker.Checker_getTypeOfPropertyOfType(ctx.TypeChecker, part, propertyName)
+				propType := ctx.TypeChecker.GetTypeOfPropertyOfType(part, propertyName)
 				if propType != nil {
 					if isNullishType(propType) {
 						isOwnNullable = true
@@ -906,7 +906,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 					continue
 				}
 
-				for _, info := range checker.Checker_getIndexInfosOfType(ctx.TypeChecker, part) {
+				for _, info := range ctx.TypeChecker.GetIndexInfosOfType(part) {
 					if utils.GetTypeName(ctx.TypeChecker, info.KeyType()) != "string" {
 						continue
 					}
@@ -1154,7 +1154,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 						// remove this undefined. Check if the base type is a mapped type
 						// and if so, remove nullish from the result.
 						if exprType != nil && !ctx.Program.Options().NoUncheckedIndexedAccess.IsTrue() {
-							objectFlags := checker.Type_objectFlags(nonNullishBase)
+							objectFlags := nonNullishBase.ObjectFlags()
 							if objectFlags&checker.ObjectFlagsMapped != 0 {
 								// Check if the mapped type has the optional modifier (?)
 								// If it does, the property genuinely can be undefined
@@ -1176,7 +1176,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 						keyType := ctx.TypeChecker.GetTypeAtLocation(argExpr)
 						if keyType != nil {
 							// Check if the key is a string literal type or union of string literals
-							keyFlags := checker.Type_flags(keyType)
+							keyFlags := keyType.Flags()
 							isLiteralKey := false
 							var literalKeys []string
 
@@ -1193,7 +1193,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 								// Union of string literals
 								allLiterals := true
 								for _, part := range keyType.Types() {
-									partFlags := checker.Type_flags(part)
+									partFlags := part.Flags()
 									if partFlags&checker.TypeFlagsStringLiteral != 0 {
 										if part.IsStringLiteral() {
 											lit := part.AsLiteralType()
@@ -1215,7 +1215,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 								var representativeType *checker.Type
 								var propertyTypeNames []string
 								for _, key := range literalKeys {
-									prop := checker.Checker_getPropertyOfType(ctx.TypeChecker, nonNullishBase, key)
+									prop := ctx.TypeChecker.GetPropertyOfType(nonNullishBase, key)
 									if prop == nil {
 										// Property doesn't exist, might be index signature
 										allNonNullish = false
@@ -1333,7 +1333,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 					parts := utils.UnionTypeParts(funcType)
 					for _, part := range parts {
 						// Skip nullish parts (null, undefined, void)
-						partFlags := checker.Type_flags(part)
+						partFlags := part.Flags()
 						if partFlags&(checker.TypeFlagsNull|checker.TypeFlagsUndefined|checker.TypeFlagsVoid) != 0 {
 							continue
 						}
@@ -1410,17 +1410,17 @@ var NoUnnecessaryConditionRule = rule.Rule{
 
 				propSymbol := ctx.TypeChecker.GetSymbolAtLocation(nameNode)
 				if propSymbol == nil {
-					propSymbol = checker.Checker_getPropertyOfType(ctx.TypeChecker, baseType, propName)
+					propSymbol = ctx.TypeChecker.GetPropertyOfType(baseType, propName)
 				}
 				if propSymbol == nil {
-					for _, prop := range checker.Checker_getPropertiesOfType(ctx.TypeChecker, baseType) {
-						if prop.Name == propName {
+					for _, prop := range ctx.TypeChecker.GetPropertiesOfType(baseType) {
+						if prop.Name() == propName {
 							propSymbol = prop
 							break
 						}
 					}
 				}
-				return propSymbol != nil && propSymbol.Flags&ast.SymbolFlagsOptional != 0
+				return propSymbol != nil && propSymbol.Flags()&ast.SymbolFlagsOptional != 0
 
 			case ast.KindElementAccessExpression:
 				return isNullableElementAccessExpression(node.AsElementAccessExpression())
@@ -1505,9 +1505,9 @@ var NoUnnecessaryConditionRule = rule.Rule{
 			}
 			predicate := ctx.TypeChecker.GetTypePredicateOfSignature(signature)
 			return predicate != nil &&
-				checker.TypePredicate_kind(predicate) == checker.TypePredicateKindAssertsIdentifier &&
-				checker.TypePredicate_t(predicate) == nil &&
-				int(checker.TypePredicate_parameterIndex(predicate)) == argumentIndex
+				predicate.Kind() == checker.TypePredicateKindAssertsIdentifier &&
+				predicate.Type() == nil &&
+				int(predicate.ParameterIndex()) == argumentIndex
 		}
 
 		var checkNode func(expression *ast.Node, isUnaryNotArgument bool, reportNode *ast.Node)
@@ -1549,7 +1549,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				return
 			}
 
-			if isElementAccess(expression) && isIndexedAccessFlags(checker.Type_flags(nodeType)) {
+			if isElementAccess(expression) && isIndexedAccessFlags(nodeType.Flags()) {
 				elemAccess := expression.AsElementAccessExpression()
 				baseType := getResolvedType(elemAccess.Expression)
 				if baseType != nil {
@@ -1559,7 +1559,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				}
 			}
 
-			flags := checker.Type_flags(nodeType)
+			flags := nodeType.Flags()
 			if isNeverType(flags) {
 				ctx.ReportDiagnostic(buildTypedValueDiagnostic(
 					buildNeverMessage(),
@@ -1618,7 +1618,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 					return nodeType, false
 				}
 				baseType := getResolvedType(access.Expression)
-				if baseType == nil || checker.Checker_getPropertyOfType(ctx.TypeChecker, baseType, ast.GetTextOfPropertyName(name)) != nil {
+				if baseType == nil || ctx.TypeChecker.GetPropertyOfType(baseType, ast.GetTextOfPropertyName(name)) != nil {
 					return nodeType, false
 				}
 				readType = checker.Checker_getTypeOfPropertyOrIndexSignatureOfType(ctx.TypeChecker, baseType, ast.GetTextOfPropertyName(name))
@@ -1684,7 +1684,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				nodeType = constrainedType
 			}
 
-			flags := checker.Type_flags(nodeType)
+			flags := nodeType.Flags()
 			switch {
 			case isNeverType(flags):
 				ctx.ReportDiagnostic(buildTypedValueDiagnostic(
@@ -1742,8 +1742,8 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				return
 			}
 
-			leftFlags := checker.Type_flags(leftType)
-			rightFlags := checker.Type_flags(rightType)
+			leftFlags := leftType.Flags()
+			rightFlags := rightType.Flags()
 
 			var isComparable func(t *checker.Type, flags checker.TypeFlags) bool
 			isComparable = func(t *checker.Type, flags checker.TypeFlags) bool {
@@ -1756,7 +1756,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 					flags |= checker.TypeFlagsNull | checker.TypeFlagsUndefined | checker.TypeFlagsVoid
 				}
 
-				typeFlags := checker.Type_flags(t)
+				typeFlags := t.Flags()
 				if typeFlags&flags != 0 {
 					return true
 				}
@@ -1875,15 +1875,15 @@ var NoUnnecessaryConditionRule = rule.Rule{
 				return
 			}
 
-			paramIndex := int(checker.TypePredicate_parameterIndex(typePredicate))
+			paramIndex := int(typePredicate.ParameterIndex())
 			if paramIndex < 0 || paramIndex >= len(checkableArguments) {
 				return
 			}
 
 			arg := checkableArguments[paramIndex]
-			predicateType := checker.TypePredicate_t(typePredicate)
+			predicateType := typePredicate.Type()
 
-			switch checker.TypePredicate_kind(typePredicate) {
+			switch typePredicate.Kind() {
 			case checker.TypePredicateKindAssertsIdentifier:
 				if predicateType == nil {
 					checkNode(arg, false, nil)
@@ -2002,7 +2002,7 @@ var NoUnnecessaryConditionRule = rule.Rule{
 // - Object types: always truthy (even empty objects are truthy in JavaScript)
 // - Symbols: always truthy (symbols are always truthy)
 func checkTypeCondition(t *checker.Type) (isTruthy bool, isFalsy bool) {
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 
 	// Never type is always falsy (empty type, no values exist)
 	if flags&checker.TypeFlagsNever != 0 {
@@ -2143,7 +2143,7 @@ func isNullishType(t *checker.Type) bool {
 		return slices.ContainsFunc(t.Types(), isNullishType)
 	}
 
-	flags := checker.Type_flags(t)
+	flags := t.Flags()
 	return flags&(checker.TypeFlagsNull|checker.TypeFlagsUndefined|checker.TypeFlagsVoid) != 0
 }
 
@@ -2152,7 +2152,7 @@ func isNullishType(t *checker.Type) bool {
 func removeNullishFromType(t *checker.Type) *checker.Type {
 	if !utils.IsUnionType(t) {
 		// Not a union - check if it's nullish
-		flags := checker.Type_flags(t)
+		flags := t.Flags()
 		if flags&(checker.TypeFlagsNull|checker.TypeFlagsUndefined|checker.TypeFlagsVoid) != 0 {
 			return nil
 		}
@@ -2242,29 +2242,29 @@ func checkPredicateFunction(ctx rule.RuleContext, funcNode *ast.Node, checkTypeG
 		typePredicate := ctx.TypeChecker.GetTypePredicateOfSignature(signature)
 		if checkTypeGuards && typePredicate != nil {
 			// Check if the argument already satisfies the type predicate
-			params := checker.Signature_parameters(signature)
+			params := signature.Parameters()
 			if len(params) > 0 {
 				// Get the parameter index being guarded
-				paramIndex := int(checker.TypePredicate_parameterIndex(typePredicate))
+				paramIndex := int(typePredicate.ParameterIndex())
 
 				if paramIndex >= 0 && paramIndex < len(params) {
 					param := params[paramIndex]
 					if param != nil {
 						paramType := ctx.TypeChecker.GetTypeOfSymbol(param)
-						predicateKind := checker.TypePredicate_kind(typePredicate)
+						predicateKind := typePredicate.Kind()
 
 						if paramType != nil {
 							// Only check "x is Type" predicates, not "asserts x" predicates
 							// "asserts x" predicates in functions are checked via their return type below
 							if predicateKind == checker.TypePredicateKindIdentifier ||
 								predicateKind == checker.TypePredicateKindThis {
-								predicateType := checker.TypePredicate_t(typePredicate)
+								predicateType := typePredicate.Type()
 								if predicateType != nil {
 									// Check if paramType is assignable to predicateType
 									// If so, the type guard is unnecessary
-									if checker.Checker_isTypeAssignableTo(ctx.TypeChecker, paramType, predicateType) {
+									if ctx.TypeChecker.IsTypeAssignableTo(paramType, predicateType) {
 										primaryRange := utils.TrimNodeTextRange(ctx.SourceFile, funcNode)
-										if declaration := param.ValueDeclaration; declaration != nil && ast.GetSourceFileOfNode(declaration) == ctx.SourceFile {
+										if declaration := param.ValueDeclaration(); declaration != nil && ast.GetSourceFileOfNode(declaration) == ctx.SourceFile {
 											primaryRange = utils.TrimNodeTextRange(ctx.SourceFile, declaration)
 										}
 										ctx.ReportDiagnostic(buildTypeGuardDiagnostic(
@@ -2285,7 +2285,7 @@ func checkPredicateFunction(ctx rule.RuleContext, funcNode *ast.Node, checkTypeG
 		returnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 
 		// Handle type parameters
-		typeFlags := checker.Type_flags(returnType)
+		typeFlags := returnType.Flags()
 		if typeFlags&checker.TypeFlagsTypeParameter != 0 {
 			constraint := ctx.TypeChecker.GetConstraintOfTypeParameter(returnType)
 			if constraint != nil {

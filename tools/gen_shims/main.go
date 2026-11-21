@@ -18,7 +18,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-const tsgoInternalPrefix = "github.com/microsoft/typescript-go/internal/"
+const tsgoInternalPrefix = "github.com/microsoft/TypeScript/tsc/internal/"
 
 func signatureHasUnexportedType(t types.Signature) bool {
 	if params := t.Params(); params != nil {
@@ -62,6 +62,8 @@ func main() {
 		"vfs",
 		"vfs/cachedvfs",
 		"vfs/osvfs",
+		"vfs/pnpvfs",
+		"pnp",
 	}
 
 	packagesToShimFullNames := make([]string, len(packagesToShim))

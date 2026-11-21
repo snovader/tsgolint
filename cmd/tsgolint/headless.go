@@ -14,12 +14,11 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/bundled"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/tspath"
-	"github.com/microsoft/typescript-go/shim/vfs/cachedvfs"
-	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/bundled"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/tspath"
+	"github.com/microsoft/TypeScript/tsc/shim/vfs/cachedvfs"
 	"github.com/typescript-eslint/tsgolint/internal/diagnostic"
 	"github.com/typescript-eslint/tsgolint/internal/linter"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
@@ -251,7 +250,7 @@ func runHeadless(args []string) int {
 		return 1
 	}
 
-	baseFS := osvfs.FS()
+	baseFS := createFileSystem(cwd)
 	if len(payload.SourceOverrides) > 0 {
 		baseFS = newOverlayFS(baseFS, payload.SourceOverrides)
 	}
@@ -273,13 +272,13 @@ func runHeadless(args []string) int {
 	tsConfigResolver := utils.NewTsConfigResolver(fs, cwd)
 
 	normalizedFiles := make([]string, 0, totalFileCount)
-	fileConfigs := make(map[tspath.Path][]headlessRule, totalFileCount)
+	fileConfigs := make(map[tspath.PathKey][]headlessRule, totalFileCount)
 	for _, config := range payload.Configs {
 		for _, filePath := range config.FilePaths {
 			normalized := tspath.NormalizeSlashes(filePath)
 			normalizedFiles = append(normalizedFiles, normalized)
 
-			fileConfigs[tspath.ToPath(normalized, cwd, fs.UseCaseSensitiveFileNames())] = config.Rules
+			fileConfigs[fs.CaseSensitivity().PathKey(tspath.ToRootedFilePath(normalized, tspath.RootedDirectoryPathFromAbsolute(cwd)).AsPath())] = config.Rules
 		}
 	}
 
@@ -340,7 +339,7 @@ func runHeadless(args []string) int {
 			if d.ruleDiagnostic != nil {
 				// Rule diagnostic
 				rd := d.ruleDiagnostic
-				filePath := rd.SourceFile.FileName()
+				filePath := rd.SourceFile.FileName().AsString()
 				hd = headlessDiagnostic{
 					Kind:          headlessDiagnosticKindRule,
 					Range:         headlessRangeFromRange(rd.Range),
@@ -417,7 +416,7 @@ func runHeadless(args []string) int {
 		Workers:          runtime.GOMAXPROCS(0),
 		FS:               fs,
 		GetRulesForFile: func(sourceFile *ast.SourceFile) []linter.ConfiguredRule {
-			cfg := fileConfigs[sourceFile.Path()]
+			cfg := fileConfigs[sourceFile.PathKey()]
 			rules := make([]linter.ConfiguredRule, len(cfg))
 
 			for i, headlessRule := range cfg {

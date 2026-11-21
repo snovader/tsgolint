@@ -3,8 +3,8 @@ package strict_void_return
 import (
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -50,7 +50,7 @@ var StrictVoidReturnRule = rule.Rule{
 			returnTypes := []*checker.Type{}
 			utils.VisitUnionTypeParts(t, func(typePart *checker.Type) bool {
 				for _, signature := range utils.GetCallSignatures(ctx.TypeChecker, typePart) {
-					returnTypes = append(returnTypes, checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature))
+					returnTypes = append(returnTypes, ctx.TypeChecker.GetReturnTypeOfSignature(signature))
 				}
 				return true
 			})
@@ -78,9 +78,9 @@ var StrictVoidReturnRule = rule.Rule{
 
 		var reportIfNonVoidFunction func(funcNode *ast.Node)
 		reportIfNonVoidFunction = func(funcNode *ast.Node) {
-			actualType := checker.Checker_getApparentType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(funcNode))
+			actualType := ctx.TypeChecker.GetApparentType(ctx.TypeChecker.GetTypeAtLocation(funcNode))
 			if utils.Every(utils.GetCallSignatures(ctx.TypeChecker, actualType), func(signature *checker.Signature) bool {
-				return isAllowedType(checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature))
+				return isAllowedType(ctx.TypeChecker.GetReturnTypeOfSignature(signature))
 			}) {
 				return
 			}
@@ -168,14 +168,14 @@ var StrictVoidReturnRule = rule.Rule{
 
 				argExpectedReturnTypes := []*checker.Type{}
 				for _, sig := range signatures {
-					parameters := checker.Signature_parameters(sig)
+					parameters := sig.Parameters()
 					if argIdx >= len(parameters) {
 						continue
 					}
 					paramType := ctx.TypeChecker.GetTypeOfSymbolAtLocation(parameters[argIdx], callNode.Expression())
 					utils.VisitUnionTypeParts(paramType, func(paramTypePart *checker.Type) bool {
 						for _, paramSignature := range utils.GetCallSignatures(ctx.TypeChecker, paramTypePart) {
-							argExpectedReturnTypes = append(argExpectedReturnTypes, checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, paramSignature))
+							argExpectedReturnTypes = append(argExpectedReturnTypes, ctx.TypeChecker.GetReturnTypeOfSignature(paramSignature))
 						}
 						return true
 					})
@@ -201,8 +201,8 @@ var StrictVoidReturnRule = rule.Rule{
 				return ""
 			}
 
-			if symbol := ctx.TypeChecker.GetSymbolAtLocation(nameNode); symbol != nil && symbol.Name != "" {
-				return symbol.Name
+			if symbol := ctx.TypeChecker.GetSymbolAtLocation(nameNode); symbol != nil && symbol.Name() != "" {
+				return symbol.Name()
 			}
 
 			switch nameNode.Kind {
@@ -245,7 +245,7 @@ var StrictVoidReturnRule = rule.Rule{
 			for _, heritageClause := range heritageClauses.Nodes {
 				for _, heritageTypeNode := range heritageClause.AsHeritageClause().Types.Nodes {
 					heritageType := ctx.TypeChecker.GetTypeAtLocation(heritageTypeNode)
-					heritageMember := checker.Checker_getPropertyOfType(ctx.TypeChecker, heritageType, memberSymbol.Name)
+					heritageMember := ctx.TypeChecker.GetPropertyOfType(heritageType, memberSymbol.Name())
 					if heritageMember == nil {
 						continue
 					}
@@ -269,7 +269,7 @@ var StrictVoidReturnRule = rule.Rule{
 			if memberName == "" {
 				return
 			}
-			propertySymbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, objType, memberName)
+			propertySymbol := ctx.TypeChecker.GetPropertyOfType(objType, memberName)
 			if propertySymbol == nil {
 				return
 			}

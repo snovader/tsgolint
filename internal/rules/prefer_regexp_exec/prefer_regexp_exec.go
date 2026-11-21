@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/dlclark/regexp2/v2"
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -199,17 +199,17 @@ var PreferRegexpExecRule = rule.Rule{
 				visited[symbol] = struct{}{}
 				defer delete(visited, symbol)
 
-				if symbol.ValueDeclaration == nil || !ast.IsVariableDeclaration(symbol.ValueDeclaration) {
+				if symbol.ValueDeclaration() == nil || !ast.IsVariableDeclaration(symbol.ValueDeclaration()) {
 					return staticArgumentValue{kind: staticArgumentValueUnknown}
 				}
 
-				declaration := symbol.ValueDeclaration.AsVariableDeclaration()
+				declaration := symbol.ValueDeclaration().AsVariableDeclaration()
 				if declaration.Initializer == nil {
 					return staticArgumentValue{kind: staticArgumentValueUnknown}
 				}
 
 				// Keep this conservative and match getStaticValue behavior for mutable bindings.
-				if !ast.IsVariableDeclarationList(symbol.ValueDeclaration.Parent) || symbol.ValueDeclaration.Parent.Flags&ast.NodeFlagsConst == 0 {
+				if !ast.IsVariableDeclarationList(symbol.ValueDeclaration().Parent) || symbol.ValueDeclaration().Parent.Flags&ast.NodeFlagsConst == 0 {
 					return staticArgumentValue{kind: staticArgumentValueUnknown}
 				}
 

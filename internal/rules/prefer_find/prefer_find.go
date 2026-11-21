@@ -8,9 +8,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -215,15 +215,15 @@ var PreferFindRule = rule.Rule{
 		}
 
 		getConstInitializer := func(symbol *ast.Symbol) (*ast.Node, bool) {
-			if symbol == nil || symbol.ValueDeclaration == nil || !ast.IsVariableDeclaration(symbol.ValueDeclaration) {
+			if symbol == nil || symbol.ValueDeclaration() == nil || !ast.IsVariableDeclaration(symbol.ValueDeclaration()) {
 				return nil, false
 			}
 
-			if !ast.IsVariableDeclarationList(symbol.ValueDeclaration.Parent) || symbol.ValueDeclaration.Parent.Flags&ast.NodeFlagsConst == 0 {
+			if !ast.IsVariableDeclarationList(symbol.ValueDeclaration().Parent) || symbol.ValueDeclaration().Parent.Flags&ast.NodeFlagsConst == 0 {
 				return nil, false
 			}
 
-			declaration := symbol.ValueDeclaration.AsVariableDeclaration()
+			declaration := symbol.ValueDeclaration().AsVariableDeclaration()
 			if declaration.Initializer == nil {
 				return nil, false
 			}
@@ -368,7 +368,7 @@ var PreferFindRule = rule.Rule{
 
 				isArrayOrIntersectionThereof := true
 				for _, intersectionPart := range utils.IntersectionTypeParts(unionPart) {
-					if !checker.Checker_isArrayType(ctx.TypeChecker, intersectionPart) && !checker.IsTupleType(intersectionPart) {
+					if !ctx.TypeChecker.IsArrayType(intersectionPart) && !checker.IsTupleType(intersectionPart) {
 						isArrayOrIntersectionThereof = false
 						break
 					}

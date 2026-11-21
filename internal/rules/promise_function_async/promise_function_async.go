@@ -1,8 +1,8 @@
 package promise_function_async
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -46,12 +46,12 @@ var PromiseFunctionAsyncRule = rule.Rule{
 				return false
 			}
 
-			if utils.IsTypeFlagSet(t, checker.TypeFlagsObject) && checker.Type_objectFlags(t)&checker.ObjectFlagsReference != 0 {
+			if utils.IsTypeFlagSet(t, checker.TypeFlagsObject) && t.ObjectFlags()&checker.ObjectFlagsReference != 0 {
 				t = t.Target()
 			}
 
-			symbol := checker.Type_symbol(t)
-			if symbol != nil && allAllowedPromiseNames.Has(symbol.Name) {
+			symbol := t.Symbol()
+			if symbol != nil && allAllowedPromiseNames.Has(symbol.Name()) {
 				return true
 			}
 
@@ -66,11 +66,11 @@ var PromiseFunctionAsyncRule = rule.Rule{
 				return utils.Some(t.Types(), predicate)
 			}
 
-			if checker.Type_objectFlags(t)&checker.ObjectFlagsClassOrInterface == 0 {
+			if t.ObjectFlags()&checker.ObjectFlagsClassOrInterface == 0 {
 				return false
 			}
 
-			bases := checker.Checker_getBaseTypes(ctx.TypeChecker, t)
+			bases := ctx.TypeChecker.GetBaseTypes(t)
 			if matchAnyInstead {
 				return utils.Some(bases, predicate)
 			}
@@ -94,7 +94,7 @@ var PromiseFunctionAsyncRule = rule.Rule{
 
 			everySignatureReturnsPromise := true
 			for _, signature := range signatures {
-				returnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+				returnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 				if !opts.AllowAny && utils.IsTypeFlagSet(returnType, checker.TypeFlagsAnyOrUnknown) {
 					// Report without auto fixer because the return type is unknown
 					// TODO(port): getFunctionHeadLoc
@@ -119,7 +119,7 @@ var PromiseFunctionAsyncRule = rule.Rule{
 			isHybridReturnType := false
 			if !hasExplicitReturnType {
 				for _, signature := range signatures {
-					returnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, signature)
+					returnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 					if utils.IsUnionType(returnType) {
 						// Check if not every part of the union is a promise type
 						allPartsArePromise := utils.Every(returnType.Types(), func(part *checker.Type) bool {

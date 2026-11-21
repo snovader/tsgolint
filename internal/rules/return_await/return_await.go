@@ -1,8 +1,8 @@
 package return_await
 
 import (
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -107,8 +107,8 @@ var ReturnAwaitRule = rule.Rule{
 			for declarationScope := ast.GetEnclosingBlockScopeContainer(node); declarationScope != nil; declarationScope = ast.GetEnclosingBlockScopeContainer(declarationScope) {
 				locals := declarationScope.Locals()
 				if locals != nil {
-					for _, local := range locals {
-						decl := local.ValueDeclaration
+					for local := range locals.Values() {
+						decl := local.ValueDeclaration()
 						// if it's a using/await using declaration, and it comes _before_ the
 						// node we're checking, it affects control flow for that node.
 

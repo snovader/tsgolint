@@ -6,10 +6,10 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -327,7 +327,7 @@ func isTypeParameterRepeatedInAST(ctx rule.RuleContext, typeParameter *ast.Node,
 				case ast.KindTypeReference, ast.KindExpressionWithTypeArguments, ast.KindImportType, ast.KindTypeQuery:
 					isArray := false
 					if ast.IsTypeReferenceNode(parent) {
-						isArray = checker.Checker_isArrayType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(parent))
+						isArray = ctx.TypeChecker.IsArrayType(ctx.TypeChecker.GetTypeAtLocation(parent))
 					}
 					if !isArray && slices.Contains(parent.TypeArguments(), typeArgument) {
 						return true
@@ -406,7 +406,7 @@ func collectTypeParameterUsageCounts(
 			if remainingTargets == 0 {
 				return
 			}
-			visitType(checker.Checker_getTypeOfSymbol(ctx.TypeChecker, symbol), assumeMultipleUses, false)
+			visitType(ctx.TypeChecker.GetTypeOfSymbol(symbol), assumeMultipleUses, false)
 		}
 	}
 
@@ -416,14 +416,14 @@ func collectTypeParameterUsageCounts(
 		}
 
 		if thisParameter := signature.ThisParameter(); thisParameter != nil {
-			visitType(checker.Checker_getTypeOfSymbol(ctx.TypeChecker, thisParameter), false, false)
+			visitType(ctx.TypeChecker.GetTypeOfSymbol(thisParameter), false, false)
 		}
 
 		for _, parameter := range signature.Parameters() {
 			if remainingTargets == 0 {
 				return
 			}
-			visitType(checker.Checker_getTypeOfSymbol(ctx.TypeChecker, parameter), false, false)
+			visitType(ctx.TypeChecker.GetTypeOfSymbol(parameter), false, false)
 		}
 
 		for _, typeParameter := range signature.TypeParameters() {
@@ -435,7 +435,7 @@ func collectTypeParameterUsageCounts(
 
 		returnType := ctx.TypeChecker.GetReturnTypeOfSignature(signature)
 		if typePredicate := ctx.TypeChecker.GetTypePredicateOfSignature(signature); typePredicate != nil {
-			if predicateType := checker.TypePredicate_t(typePredicate); predicateType != nil {
+			if predicateType := typePredicate.Type(); predicateType != nil {
 				returnType = predicateType
 			}
 		}
@@ -449,9 +449,9 @@ func collectTypeParameterUsageCounts(
 		}
 
 		if utils.IsTypeParameter(typeNode) {
-			typeParameterSymbol := checker.Type_symbol(typeNode)
-			if typeParameterSymbol != nil && len(typeParameterSymbol.Declarations) != 0 {
-				declaration := typeParameterSymbol.Declarations[0]
+			typeParameterSymbol := typeNode.Symbol()
+			if typeParameterSymbol != nil && len(typeParameterSymbol.Declarations()) != 0 {
+				declaration := typeParameterSymbol.Declarations()[0]
 				if ast.IsTypeParameterDeclaration(declaration) {
 					incrementIdentifierCount(typeParameterSymbol, assumeMultipleUses)
 
@@ -470,7 +470,7 @@ func collectTypeParameterUsageCounts(
 			return
 		}
 
-		if alias := checker.Type_alias(typeNode); alias != nil {
+		if alias := typeNode.Alias(); alias != nil {
 			if aliasTypeArguments := alias.TypeArguments(); len(aliasTypeArguments) != 0 {
 				visitTypesList(aliasTypeArguments, true)
 				return
@@ -482,25 +482,25 @@ func collectTypeParameterUsageCounts(
 			return
 		}
 
-		if checker.Type_flags(typeNode)&checker.TypeFlagsIndexedAccess != 0 {
+		if typeNode.Flags()&checker.TypeFlagsIndexedAccess != 0 {
 			indexedAccessType := typeNode.AsIndexedAccessType()
-			visitType(checker.IndexedAccessType_objectType(indexedAccessType), assumeMultipleUses, false)
-			visitType(checker.IndexedAccessType_indexType(indexedAccessType), assumeMultipleUses, false)
+			visitType(indexedAccessType.ObjectType(), assumeMultipleUses, false)
+			visitType(indexedAccessType.IndexType(), assumeMultipleUses, false)
 			return
 		}
 
-		if checker.Type_flags(typeNode)&checker.TypeFlagsObject != 0 && checker.Type_objectFlags(typeNode)&checker.ObjectFlagsReference != 0 {
-			typeArguments := checker.Checker_getTypeArguments(ctx.TypeChecker, typeNode)
+		if typeNode.Flags()&checker.TypeFlagsObject != 0 && typeNode.ObjectFlags()&checker.ObjectFlagsReference != 0 {
+			typeArguments := ctx.TypeChecker.GetTypeArguments(typeNode)
 			if len(typeArguments) != 0 {
 				target := typeNode.Target()
 				for _, typeArgument := range typeArguments {
 					thisAssumeMultipleUses := fromClass || assumeMultipleUses
 					if checker.IsTupleType(target) {
-						thisAssumeMultipleUses = thisAssumeMultipleUses || (isReturnType && !checker.TupleType_readonly(target.AsTupleType()))
-					} else if checker.Checker_isArrayType(ctx.TypeChecker, target) {
+						thisAssumeMultipleUses = thisAssumeMultipleUses || (isReturnType && !target.AsTupleType().IsReadonly())
+					} else if ctx.TypeChecker.IsArrayType(target) {
 						symbolName := ""
-						if typeSymbol := checker.Type_symbol(typeNode); typeSymbol != nil {
-							symbolName = typeSymbol.Name
+						if typeSymbol := typeNode.Symbol(); typeSymbol != nil {
+							symbolName = typeSymbol.Name()
 						}
 						thisAssumeMultipleUses = thisAssumeMultipleUses || (isReturnType && symbolName == "Array")
 					} else {
@@ -512,31 +512,31 @@ func collectTypeParameterUsageCounts(
 			return
 		}
 
-		if checker.Type_flags(typeNode)&checker.TypeFlagsTemplateLiteral != 0 {
+		if typeNode.Flags()&checker.TypeFlagsTemplateLiteral != 0 {
 			visitTypesList(typeNode.Types(), assumeMultipleUses)
 			return
 		}
 
-		if checker.Type_flags(typeNode)&checker.TypeFlagsConditional != 0 {
+		if typeNode.Flags()&checker.TypeFlagsConditional != 0 {
 			conditionalType := typeNode.AsConditionalType()
-			visitType(checker.ConditionalType_checkType(conditionalType), assumeMultipleUses, false)
-			visitType(checker.ConditionalType_extendsType(conditionalType), assumeMultipleUses, false)
+			visitType(conditionalType.CheckType(), assumeMultipleUses, false)
+			visitType(conditionalType.ExtendsType(), assumeMultipleUses, false)
 			return
 		}
 
 		if utils.IsObjectType(typeNode) {
-			properties := checker.Checker_getPropertiesOfType(ctx.TypeChecker, typeNode)
+			properties := ctx.TypeChecker.GetPropertiesOfType(typeNode)
 			visitSymbolsList(properties, false)
 
-			if checker.Type_objectFlags(typeNode)&checker.ObjectFlagsMapped != 0 {
+			if typeNode.ObjectFlags()&checker.ObjectFlagsMapped != 0 {
 				mappedType := typeNode.AsMappedType()
-				visitType(checker.MappedType_typeParameter(mappedType), false, false)
+				visitType(mappedType.TypeParameter(), false, false)
 				if len(properties) == 0 {
-					templateType := checker.MappedType_templateType(mappedType)
+					templateType := mappedType.TemplateType()
 					if templateType != nil {
 						visitType(templateType, false, false)
 					} else {
-						visitType(checker.MappedType_constraintType(mappedType), false, false)
+						visitType(mappedType.ConstraintType(), false, false)
 					}
 				}
 			}
@@ -561,8 +561,8 @@ func collectTypeParameterUsageCounts(
 			return
 		}
 
-		if checker.Type_flags(typeNode)&checker.TypeFlagsIndex != 0 ||
-			checker.Type_flags(typeNode)&checker.TypeFlagsStringMapping != 0 {
+		if typeNode.Flags()&checker.TypeFlagsIndex != 0 ||
+			typeNode.Flags()&checker.TypeFlagsStringMapping != 0 {
 			visitType(typeNode.Target(), assumeMultipleUses, false)
 			return
 		}

@@ -3,9 +3,9 @@ package no_unsafe_assignment
 import (
 	"fmt"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -174,13 +174,13 @@ var NoUnsafeAssignmentRule = rule.Rule{
 			senderType *checker.Type,
 			senderNode *ast.Node,
 		) bool {
-			propertySymbols := checker.Checker_getPropertiesOfType(ctx.TypeChecker, senderType)
+			propertySymbols := ctx.TypeChecker.GetPropertiesOfType(senderType)
 			if propertySymbols == nil {
 				return false
 			}
 			properties := make(map[string]*checker.Type, len(propertySymbols))
 			for _, property := range propertySymbols {
-				properties[property.Name] = ctx.TypeChecker.GetTypeOfSymbolAtLocation(property, senderNode)
+				properties[property.Name()] = ctx.TypeChecker.GetTypeOfSymbolAtLocation(property, senderNode)
 			}
 
 			checkObjectProperty := func(propertyKey *ast.Node, propertyValue *ast.Node) bool {
@@ -285,7 +285,7 @@ var NoUnsafeAssignmentRule = rule.Rule{
 				return true
 			}
 
-			tupleElements := checker.Checker_getTypeArguments(ctx.TypeChecker, senderType)
+			tupleElements := ctx.TypeChecker.GetTypeArguments(senderType)
 
 			checkArrayElement := func(receiverElement *ast.Node, receiverIndex int) bool {
 				if receiverElement == nil {

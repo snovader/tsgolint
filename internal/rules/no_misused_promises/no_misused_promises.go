@@ -5,9 +5,9 @@ import (
 	"slices"
 
 	"github.com/go-json-experiment/json"
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -139,12 +139,12 @@ var NoMisusedPromisesRule = rule.Rule{
 			t *checker.Type,
 		) bool {
 			return utils.Some(utils.GetCallSignatures(ctx.TypeChecker, t), func(sig *checker.Signature) bool {
-				return utils.IsThenableType(ctx.TypeChecker, node, checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, sig))
+				return utils.IsThenableType(ctx.TypeChecker, node, ctx.TypeChecker.GetReturnTypeOfSignature(sig))
 			})
 		}
 
 		returnsThenable := func(node *ast.Node) bool {
-			t := checker.Checker_getApparentType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(node))
+			t := ctx.TypeChecker.GetApparentType(ctx.TypeChecker.GetTypeAtLocation(node))
 			return utils.Some(utils.UnionTypeParts(t), func(t *checker.Type) bool {
 				return anySignatureIsThenableType(node, t)
 			})
@@ -166,11 +166,11 @@ var NoMisusedPromisesRule = rule.Rule{
 			if symbol == nil {
 				return nil
 			}
-			declarations := make([]*ast.Node, 0, len(symbol.Declarations)+1)
-			if symbol.ValueDeclaration != nil {
-				declarations = append(declarations, symbol.ValueDeclaration)
+			declarations := make([]*ast.Node, 0, len(symbol.Declarations())+1)
+			if symbol.ValueDeclaration() != nil {
+				declarations = append(declarations, symbol.ValueDeclaration())
 			}
-			declarations = append(declarations, symbol.Declarations...)
+			declarations = append(declarations, symbol.Declarations()...)
 			for _, declaration := range declarations {
 				if expectation := localExpectationForDeclaration(declaration, t); expectation != nil {
 					return expectation
@@ -263,7 +263,7 @@ var NoMisusedPromisesRule = rule.Rule{
 			param *ast.Symbol,
 			node *ast.Node,
 		) bool {
-			t := checker.Checker_getApparentType(ctx.TypeChecker, ctx.TypeChecker.GetTypeOfSymbolAtLocation(param, node))
+			t := ctx.TypeChecker.GetApparentType(ctx.TypeChecker.GetTypeOfSymbolAtLocation(param, node))
 			if t == nil {
 				return false
 			}
@@ -279,8 +279,8 @@ var NoMisusedPromisesRule = rule.Rule{
 		isAlwaysThenable := func(node *ast.Node) bool {
 			t := ctx.TypeChecker.GetTypeAtLocation(node)
 
-			for _, subType := range utils.UnionTypeParts(checker.Checker_getApparentType(ctx.TypeChecker, t)) {
-				thenProp := checker.Checker_getPropertyOfType(ctx.TypeChecker, subType, "then")
+			for _, subType := range utils.UnionTypeParts(ctx.TypeChecker.GetApparentType(t)) {
+				thenProp := ctx.TypeChecker.GetPropertyOfType(subType, "then")
 
 				// If one of the alternates has no then property, it is not thenable in all
 				// cases.
@@ -295,7 +295,7 @@ var NoMisusedPromisesRule = rule.Rule{
 				hasThenableSignature := false
 				for _, subType := range utils.UnionTypeParts(thenType) {
 					for _, signature := range utils.GetCallSignatures(ctx.TypeChecker, subType) {
-						params := checker.Signature_parameters(signature)
+						params := signature.Parameters()
 						if len(params) != 0 && isFunctionParam(params[0], node) {
 							hasThenableSignature = true
 						}
@@ -321,14 +321,14 @@ var NoMisusedPromisesRule = rule.Rule{
 		}
 
 		isSometimesThenable := func(node *ast.Node) bool {
-			t := checker.Checker_getApparentType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(node))
+			t := ctx.TypeChecker.GetApparentType(ctx.TypeChecker.GetTypeAtLocation(node))
 			return utils.Some(utils.UnionTypeParts(t), func(t *checker.Type) bool {
 				return utils.IsThenableType(ctx.TypeChecker, node, t)
 			})
 		}
 
 		hasMatchingPromiseTypeArgument := func(node *ast.Node) bool {
-			unionConstituents := utils.UnionTypeParts(checker.Checker_getApparentType(ctx.TypeChecker, ctx.TypeChecker.GetTypeAtLocation(node)))
+			unionConstituents := utils.UnionTypeParts(ctx.TypeChecker.GetApparentType(ctx.TypeChecker.GetTypeAtLocation(node)))
 			promiseTypes := map[*checker.Type]struct{}{}
 			nonPromiseUnionConstituents := make([]*checker.Type, 0, len(unionConstituents))
 			for _, t := range unionConstituents {
@@ -347,7 +347,7 @@ var NoMisusedPromisesRule = rule.Rule{
 				if _, ok := promiseTypes[promiseType]; !ok {
 					continue
 				}
-				awaitedType := checker.Checker_getAwaitedType(ctx.TypeChecker, promiseType)
+				awaitedType := ctx.TypeChecker.GetAwaitedType(promiseType)
 				if awaitedType == nil {
 					return false
 				}
@@ -369,8 +369,8 @@ var NoMisusedPromisesRule = rule.Rule{
 					return true
 				}
 				return utils.Some(candidates, func(candidate *checker.Type) bool {
-					return checker.Checker_isTypeAssignableTo(ctx.TypeChecker, t, candidate) &&
-						checker.Checker_isTypeAssignableTo(ctx.TypeChecker, candidate, t)
+					return ctx.TypeChecker.IsTypeAssignableTo(t, candidate) &&
+						ctx.TypeChecker.IsTypeAssignableTo(candidate, t)
 				})
 			}
 
@@ -428,15 +428,15 @@ var NoMisusedPromisesRule = rule.Rule{
 		) *ast.Symbol {
 			// TODO(port)
 			// const escapedMemberName = ts.escapeLeadingUnderscores(memberName);
-			symbol := checker.Type_symbol(t)
+			symbol := t.Symbol()
 			if symbol != nil {
-				symbol = symbol.Members[memberName]
+				symbol = symbol.Members().Get(memberName)
 			}
 			if symbol != nil {
 				return symbol
 			}
 
-			return checker.Checker_getPropertyOfType(ctx.TypeChecker, t, memberName)
+			return ctx.TypeChecker.GetPropertyOfType(t, memberName)
 		}
 
 		// Synthesizing signatures for a union constraint can cause exponential intersections of callback parameters.
@@ -461,7 +461,7 @@ var NoMisusedPromisesRule = rule.Rule{
 			hadVoidReturn := false
 			if !visitFunctionTypeParts(t, func(part *checker.Type) bool {
 				for _, sig := range utils.GetCallSignatures(ctx.TypeChecker, part) {
-					returnType := checker.Checker_getReturnTypeOfSignature(ctx.TypeChecker, sig)
+					returnType := ctx.TypeChecker.GetReturnTypeOfSignature(sig)
 					// If a certain positional argument accepts both thenable and void returns,
 					// a promise-returning function is valid
 					if utils.IsThenableType(ctx.TypeChecker, node, returnType) {
@@ -521,7 +521,7 @@ var NoMisusedPromisesRule = rule.Rule{
 				var expectation *voidExpectation
 				attributesType := checker.Checker_getContextualType(ctx.TypeChecker, node.AsNode().Parent, checker.ContextFlagsNone)
 				if attributesType != nil {
-					propertySymbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, attributesType, node.Name().Text())
+					propertySymbol := ctx.TypeChecker.GetPropertyOfType(attributesType, node.Name().Text())
 					expectation = localExpectationForSymbol(propertySymbol, contextualType)
 				}
 				reportNode(
@@ -585,7 +585,7 @@ var NoMisusedPromisesRule = rule.Rule{
 					}
 				}
 			}
-			contextualType := checker.Checker_getContextualTypeForArgumentAtIndex(ctx.TypeChecker, node, index)
+			contextualType := ctx.TypeChecker.GetContextualTypeForArgumentAtIndex(node, index)
 
 			if contextualType != t {
 				checkThenableOrVoidArgument(
@@ -630,21 +630,21 @@ var NoMisusedPromisesRule = rule.Rule{
 					signatures = utils.GetConstructSignatures(ctx.TypeChecker, subType)
 				}
 				for _, signature := range signatures {
-					for index, parameter := range checker.Signature_parameters(signature) {
+					for index, parameter := range signature.Parameters() {
 						if index >= len(node.Arguments()) {
 							break
 						}
-						parameterDeclaration := parameter.ValueDeclaration
+						parameterDeclaration := parameter.ValueDeclaration()
 						t := ctx.TypeChecker.GetTypeOfSymbolAtLocation(parameter, node.Expression())
 
 						// If this is a array 'rest' parameter, check all of the argument indices
 						// from the current argument to the end.
 						if parameterDeclaration != nil && utils.IsRestParameterDeclaration(parameterDeclaration) {
-							if checker.Checker_isArrayType(ctx.TypeChecker, t) {
+							if ctx.TypeChecker.IsArrayType(t) {
 								// Unwrap 'Array<MaybeVoidFunction>' to 'MaybeVoidFunction',
 								// so that we'll handle it in the same way as a non-rest
 								// 'param: MaybeVoidFunction'
-								t = checker.Checker_getTypeArguments(ctx.TypeChecker, t)[0]
+								t = ctx.TypeChecker.GetTypeArguments(t)[0]
 								for i := index; i < len(node.Arguments()); i++ {
 									checkThenableOrVoidArgument(
 										node,
@@ -660,7 +660,7 @@ var NoMisusedPromisesRule = rule.Rule{
 							} else if checker.IsTupleType(t) {
 								// Check each type in the tuple - for example, [boolean, () => void] would
 								// add the index of the second tuple parameter to 'voidReturnIndices'
-								typeArgs := checker.Checker_getTypeArguments(ctx.TypeChecker, t)
+								typeArgs := ctx.TypeChecker.GetTypeArguments(t)
 								for i := index; i < len(node.Arguments()) && i-index < len(typeArgs); i++ {
 									checkThenableOrVoidArgument(
 										node,
@@ -773,7 +773,7 @@ var NoMisusedPromisesRule = rule.Rule{
 			if objType == nil {
 				return nil
 			}
-			propertySymbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, objType, propertyNode.Name().Text())
+			propertySymbol := ctx.TypeChecker.GetPropertyOfType(objType, propertyNode.Name().Text())
 			return localExpectationForSymbol(propertySymbol, t)
 		}
 
@@ -826,7 +826,7 @@ var NoMisusedPromisesRule = rule.Rule{
 				if objType == nil {
 					return
 				}
-				propertySymbol := checker.Checker_getPropertyOfType(ctx.TypeChecker, objType, node.Name().Text())
+				propertySymbol := ctx.TypeChecker.GetPropertyOfType(objType, node.Name().Text())
 				if propertySymbol == nil {
 					return
 				}
@@ -940,7 +940,7 @@ var NoMisusedPromisesRule = rule.Rule{
 					// getter whose type comes from its paired setter's parameter.
 					if functionType := checker.Checker_getContextualType(ctx.TypeChecker, functionNode, checker.ContextFlagsNone); functionType != nil {
 						for _, signature := range utils.GetCallSignatures(ctx.TypeChecker, functionType) {
-							if expectation = localExpectationForDeclaration(checker.Signature_declaration(signature), contextualType); expectation != nil {
+							if expectation = localExpectationForDeclaration(signature.Declaration(), contextualType); expectation != nil {
 								break
 							}
 						}

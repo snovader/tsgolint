@@ -3,10 +3,10 @@ package no_unnecessary_type_arguments
 import (
 	"slices"
 
-	"github.com/microsoft/typescript-go/shim/ast"
-	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/core"
-	"github.com/microsoft/typescript-go/shim/scanner"
+	"github.com/microsoft/TypeScript/tsc/shim/ast"
+	"github.com/microsoft/TypeScript/tsc/shim/checker"
+	"github.com/microsoft/TypeScript/tsc/shim/core"
+	"github.com/microsoft/TypeScript/tsc/shim/scanner"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
 	"github.com/typescript-eslint/tsgolint/internal/utils"
 )
@@ -32,10 +32,10 @@ type typeForComparison struct {
 }
 
 func getTypeForComparison(typeChecker *checker.Checker, t *checker.Type) typeForComparison {
-	if checker.Type_objectFlags(t)&checker.ObjectFlagsReference != 0 {
+	if t.ObjectFlags()&checker.ObjectFlagsReference != 0 {
 		return typeForComparison{
 			typeValue:     t.Target(),
-			typeArguments: checker.Checker_getTypeArguments(typeChecker, t),
+			typeArguments: typeChecker.GetTypeArguments(t),
 		}
 	}
 
@@ -53,7 +53,7 @@ var NoUnnecessaryTypeArgumentsRule = rule.Rule{
 				return nil
 			}
 
-			if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+			if symbol.Flags()&ast.SymbolFlagsAlias != 0 {
 				var found bool
 				symbol, found = ctx.TypeChecker.ResolveAlias(symbol)
 				if !found {
@@ -61,11 +61,11 @@ var NoUnnecessaryTypeArgumentsRule = rule.Rule{
 				}
 			}
 
-			if symbol.Declarations == nil {
+			if symbol.Declarations() == nil {
 				return nil
 			}
 
-			declarations := slices.Clone(symbol.Declarations)
+			declarations := slices.Clone(symbol.Declarations())
 
 			nodeInTypeContext := isInTypeContext(node)
 			slices.SortFunc(declarations, func(a *ast.Node, b *ast.Node) int {
@@ -90,12 +90,12 @@ var NoUnnecessaryTypeArgumentsRule = rule.Rule{
 				}
 
 				if ast.IsVariableDeclaration(decl) {
-					t := checker.Checker_getTypeOfSymbol(ctx.TypeChecker, symbol)
+					t := ctx.TypeChecker.GetTypeOfSymbol(symbol)
 					signatures := utils.GetConstructSignatures(ctx.TypeChecker, t)
 					if len(signatures) == 0 {
 						continue
 					}
-					decl := checker.Signature_declaration(signatures[0])
+					decl := signatures[0].Declaration()
 					if decl != nil {
 						return decl.TypeParameters()
 					}
@@ -108,7 +108,7 @@ var NoUnnecessaryTypeArgumentsRule = rule.Rule{
 		getTypeParametersFromCall := func(node *ast.Node) []*ast.Node {
 			signature := checker.Checker_getResolvedSignature(ctx.TypeChecker, node, nil, checker.CheckModeNormal)
 			if signature != nil {
-				if declaration := checker.Signature_declaration(signature); declaration != nil {
+				if declaration := signature.Declaration(); declaration != nil {
 					if typeParameters := declaration.TypeParameters(); len(typeParameters) != 0 {
 						return typeParameters
 					}
@@ -166,7 +166,7 @@ var NoUnnecessaryTypeArgumentsRule = rule.Rule{
 			if signature == nil {
 				return false
 			}
-			declaration := checker.Signature_declaration(signature)
+			declaration := signature.Declaration()
 			if declaration == nil || declaration.FunctionLikeData() == nil {
 				return false
 			}
