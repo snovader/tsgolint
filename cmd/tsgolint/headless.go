@@ -9,16 +9,13 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"slices"
 	"sync"
 
 	"github.com/go-json-experiment/json"
 
 	"github.com/microsoft/TypeScript/tsc/shim/ast"
-	"github.com/microsoft/TypeScript/tsc/shim/bundled"
 	"github.com/microsoft/TypeScript/tsc/shim/core"
 	"github.com/microsoft/TypeScript/tsc/shim/tspath"
-	"github.com/microsoft/TypeScript/tsc/shim/vfs/cachedvfs"
 	"github.com/typescript-eslint/tsgolint/internal/diagnostic"
 	"github.com/typescript-eslint/tsgolint/internal/linter"
 	"github.com/typescript-eslint/tsgolint/internal/rule"
@@ -250,79 +247,11 @@ func runHeadless(args []string) int {
 		return 1
 	}
 
-	baseFS := createFileSystem(cwd)
-	if len(payload.SourceOverrides) > 0 {
-		baseFS = newOverlayFS(baseFS, payload.SourceOverrides)
-	}
-	fs := bundled.WrapFS(cachedvfs.From(baseFS))
-
-	workload := linter.Workload{
-		Programs:       make(map[string][]string),
-		UnmatchedFiles: []string{},
-	}
-
-	totalFileCount := 0
-	for _, config := range payload.Configs {
-		totalFileCount += len(config.FilePaths)
-	}
-	if logLevel == utils.LogLevelDebug {
-		log.Printf("Starting to assign files to programs. Total files: %d", totalFileCount)
-	}
-
-	tsConfigResolver := utils.NewTsConfigResolver(fs, cwd)
-
-	normalizedFiles := make([]string, 0, totalFileCount)
-	fileConfigs := make(map[tspath.PathKey][]headlessRule, totalFileCount)
-	for _, config := range payload.Configs {
-		for _, filePath := range config.FilePaths {
-			normalized := tspath.NormalizeSlashes(filePath)
-			normalizedFiles = append(normalizedFiles, normalized)
-
-			fileConfigs[fs.CaseSensitivity().PathKey(tspath.ToRootedFilePath(normalized, tspath.RootedDirectoryPathFromAbsolute(cwd)).AsPath())] = config.Rules
-		}
-	}
-
-	result := tsConfigResolver.FindTsConfigParallel(normalizedFiles)
-	for file, tsconfig := range result {
-		if tsconfig == "" {
-			workload.UnmatchedFiles = append(workload.UnmatchedFiles, file)
-		} else {
-			workload.Programs[tsconfig] = append(workload.Programs[tsconfig], file)
-		}
-	}
-
-	if logLevel == utils.LogLevelDebug {
-		for file, tsconfig := range result {
-			tsconfigStr := "<none>"
-			if tsconfig != "" {
-				tsconfigStr = tsconfig
-			}
-			log.Printf("Got tsconfig for file %s: %s", file, tsconfigStr)
-		}
-
-		log.Printf("Done assigning files to programs. Total programs: %d. Unmatched files: %d", len(workload.Programs), len(workload.UnmatchedFiles))
-		for program, files := range workload.Programs {
-			log.Printf("  Program %s: %d files", program, len(files))
-		}
-		for _, file := range workload.UnmatchedFiles {
-			log.Printf("  Unmatched file: %s", file)
-		}
-	}
+	projects := prepareHeadlessProjects(tspath.NormalizePath(cwd), payload, logLevel == utils.LogLevelDebug)
 
 	allRulesByName := make(map[string]rule.Rule, len(allRules))
 	for _, r := range allRules {
 		allRulesByName[r.Name] = r
-	}
-
-	for _, files := range workload.Programs {
-		slices.SortFunc(files, func(a, b string) int {
-			return len(b) - len(a)
-		})
-	}
-
-	if logLevel == utils.LogLevelDebug {
-		log.Printf("Starting linter with %d workers", runtime.GOMAXPROCS(0))
-		log.Printf("Workload distribution: %d programs", len(workload.Programs))
 	}
 
 	var wg sync.WaitGroup
@@ -409,44 +338,34 @@ func runHeadless(args []string) int {
 		log.Printf("Running Linter")
 	}
 
-	err = linter.RunLinter(linter.RunLinterOptions{
-		LogLevel:         logLevel,
-		CurrentDirectory: cwd,
-		Workload:         workload,
-		Workers:          runtime.GOMAXPROCS(0),
-		FS:               fs,
-		GetRulesForFile: func(sourceFile *ast.SourceFile) []linter.ConfiguredRule {
-			cfg := fileConfigs[sourceFile.PathKey()]
-			rules := make([]linter.ConfiguredRule, len(cfg))
+	for _, project := range projects {
+		err = linter.RunLinter(linter.RunLinterOptions{
+			LogLevel:         logLevel,
+			CurrentDirectory: project.currentDirectory,
+			Workload:         project.workload,
+			Workers:          runtime.GOMAXPROCS(0),
+			FS:               project.fs,
+			GetRulesForFile: func(sourceFile *ast.SourceFile) []linter.ConfiguredRule {
+				return project.configuredRules(sourceFile, allRulesByName)
+			},
+			OnRuleDiagnostic:     func(d rule.RuleDiagnostic) { diagnosticsChan <- ruleToAny(d) },
+			OnInternalDiagnostic: func(d diagnostic.Internal) { diagnosticsChan <- internalToAny(d) },
+			Fixes: linter.Fixes{
+				Fix:            opts.fix,
+				FixSuggestions: opts.fixSuggestions,
+			},
+			TypeErrors: linter.TypeErrors{
+				ReportSyntactic: payload.ReportSyntactic,
+				ReportSemantic:  payload.ReportSemantic,
+			},
+			SuppressProgramDiagnostics: suppressProgramDiagnostics(),
+			TimingStore:                timingStore,
+		})
 
-			for i, headlessRule := range cfg {
-				r, ok := allRulesByName[headlessRule.Name]
-				if !ok {
-					panic(fmt.Sprintf("unknown rule: %v", headlessRule.Name))
-				}
-				rules[i] = linter.ConfiguredRule{
-					Name: r.Name,
-					Run: func(ctx rule.RuleContext) rule.RuleListeners {
-						return r.Run(ctx, headlessRule.Options)
-					},
-				}
-			}
-
-			return rules
-		},
-		OnRuleDiagnostic:     func(d rule.RuleDiagnostic) { diagnosticsChan <- ruleToAny(d) },
-		OnInternalDiagnostic: func(d diagnostic.Internal) { diagnosticsChan <- internalToAny(d) },
-		Fixes: linter.Fixes{
-			Fix:            opts.fix,
-			FixSuggestions: opts.fixSuggestions,
-		},
-		TypeErrors: linter.TypeErrors{
-			ReportSyntactic: payload.ReportSyntactic,
-			ReportSemantic:  payload.ReportSemantic,
-		},
-		SuppressProgramDiagnostics: suppressProgramDiagnostics(),
-		TimingStore:                timingStore,
-	})
+		if err != nil {
+			break
+		}
+	}
 
 	close(diagnosticsChan)
 	if err != nil {

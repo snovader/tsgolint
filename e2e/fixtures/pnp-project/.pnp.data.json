@@ -1,0 +1,55 @@
+{
+  "dependencyTreeRoots": [
+    {
+      "name": "project",
+      "reference": "workspace:."
+    }
+  ],
+  "packageRegistryData": [
+    [
+      "project",
+      [
+        [
+          "workspace:.",
+          {
+            "packageLocation": "./",
+            "packageDependencies": [
+              [
+                "@fixture/config",
+                "npm:1.0.0"
+              ],
+              [
+                "@fixture/api",
+                "npm:1.0.0"
+              ]
+            ]
+          }
+        ]
+      ]
+    ],
+    [
+      "@fixture/config",
+      [
+        [
+          "npm:1.0.0",
+          {
+            "packageLocation": "./packages.zip/node_modules/@fixture/config/",
+            "packageDependencies": []
+          }
+        ]
+      ]
+    ],
+    [
+      "@fixture/api",
+      [
+        [
+          "npm:1.0.0",
+          {
+            "packageLocation": "./packages.zip/node_modules/@fixture/api/",
+            "packageDependencies": []
+          }
+        ]
+      ]
+    ]
+  ]
+}

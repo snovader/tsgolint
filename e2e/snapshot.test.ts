@@ -184,6 +184,105 @@ function sortDiagnostics(diagnostics: Diagnostic[]): Diagnostic[] {
   return diagnostics;
 }
 
+describe('PnP projects outside the working directory', () => {
+  it.each(['outside', 'inside'] as const)('resolves mixed projects from %s PnP', async (location) => {
+    const directory = await fs.mkdtemp(join(tmpdir(), 'tsgolint-pnp-'));
+    try {
+      const first = join(directory, 'first');
+      const second = join(directory, 'second');
+      const nested = join(first, 'nested');
+      for (const project of [first, second, nested]) {
+        await fs.cp(join(FIXTURES_DIR, 'pnp-project'), project, { recursive: true });
+      }
+
+      const ordinary = join(directory, 'ordinary');
+      await fs.mkdir(ordinary);
+      const original = join(ordinary, 'original.ts');
+      await fs.writeFile(original, 'Promise.resolve();');
+      // Exercise editor casing in the same request as PnP when the host supports it.
+      const editorFile = (await fs.stat(join(ordinary, 'Original.ts')).catch(() => undefined))
+        ? join(ordinary, 'Original.ts')
+        : original;
+      await fs.writeFile(join(ordinary, 'tsconfig.json'), JSON.stringify({ files: ['original.ts'] }));
+      const unsaved = join(directory, 'unsaved.ts');
+      const firstFile = join(first, 'index.ts');
+      const files = [firstFile, join(second, 'index.ts'), join(nested, 'index.ts'), editorFile, unsaved];
+      const input = {
+        version: 2,
+        configs: [{ file_paths: files, rules: [{ name: 'no-floating-promises' }] }],
+        source_overrides: {
+          [firstFile]: (await fs.readFile(firstFile, 'utf8')) + 'Promise.resolve();',
+          [original]: 'Promise.resolve(); Promise.resolve();',
+          [unsaved]: 'Promise.resolve();',
+        },
+        report_semantic: true,
+        report_syntactic: true,
+      };
+      const diagnostics = parseHeadlessOutput(execFileSync(TSGOLINT_BIN, ['headless'], {
+        cwd: location === 'inside' ? first : directory,
+        input: JSON.stringify(input),
+      }));
+
+      expect(diagnostics.filter((diagnostic) => diagnostic.kind === DiagnosticKind.Internal)).toEqual([]);
+      expect(diagnostics).toHaveLength(13);
+      const counts = new Map<string, number>();
+      for (const diagnostic of diagnostics) {
+        expect('rule' in diagnostic && diagnostic.rule).toBe('no-floating-promises');
+        const file = diagnostic.file_path.toLowerCase().replaceAll('\\', '/');
+        counts.set(file, (counts.get(file) ?? 0) + 1);
+      }
+      expect(files.map((file) => counts.get(file.toLowerCase().replaceAll('\\', '/')))).toEqual([4, 3, 3, 2, 1]);
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves PnP imports for inferred projects and unsaved files', async () => {
+    const directory = await fs.mkdtemp(join(tmpdir(), 'tsgolint-pnp-inferred-'));
+    try {
+      const project = join(directory, 'project');
+      await fs.cp(join(FIXTURES_DIR, 'pnp-project'), project, { recursive: true });
+      await fs.rm(join(project, 'tsconfig.json'));
+      const unsaved = join(project, 'unsaved.ts');
+      const diagnostics = parseHeadlessOutput(execFileSync(TSGOLINT_BIN, ['headless'], {
+        cwd: directory,
+        input: JSON.stringify({
+          version: 2,
+          configs: [{
+            file_paths: [join(project, 'index.ts'), unsaved],
+            rules: [{ name: 'no-floating-promises' }],
+          }],
+          source_overrides: {
+            [unsaved]: "import { subpathPromise } from '@fixture/api/subpath'; subpathPromise();",
+          },
+          report_semantic: true,
+          report_syntactic: true,
+        }),
+      }));
+      expect(diagnostics).toHaveLength(4);
+      for (const diagnostic of diagnostics) {
+        expect(diagnostic.kind === DiagnosticKind.Rule && diagnostic.rule).toBe('no-floating-promises');
+      }
+      expect(diagnostics.filter((diagnostic) => diagnostic.file_path === unsaved)).toHaveLength(1);
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves an explicit CLI tsconfig outside the working directory', async () => {
+    const directory = await fs.mkdtemp(join(tmpdir(), 'tsgolint-pnp-cli-'));
+    try {
+      const project = join(directory, 'project');
+      await fs.cp(join(FIXTURES_DIR, 'pnp-project'), project, { recursive: true });
+      const config = join(project, 'tsconfig.json');
+      const outside = execFileSync(TSGOLINT_BIN, ['--tsconfig', config, '--list-files'], { cwd: directory });
+      expect(outside.toString()).toContain('Found file: index.ts');
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 async function getTestFiles(testPath: string): Promise<string[]> {
   const patterns = [`${testPath}/**/*.ts`, `${testPath}/**/*.tsx`, `${testPath}/**/*.mts`, `${testPath}/**/*.cts`];
   const allFiles: string[] = [];

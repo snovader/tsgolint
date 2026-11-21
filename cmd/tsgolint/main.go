@@ -498,24 +498,19 @@ func runMain() int {
 	}
 	currentDirectory = tspath.NormalizePath(currentDirectory)
 
-	fs := bundled.WrapFS(cachedvfs.From(createFileSystem(currentDirectory)))
-	var configFileName string
-	if tsconfig == "" {
-		configFileName = tspath.ResolvePath(currentDirectory, "tsconfig.json")
-		if !fs.FileExists(tspath.RootedFilePathFromAbsolute(configFileName)) {
-			fs = utils.NewOverlayVFS(fs, map[string]string{
-				configFileName: "{}",
-			})
-		}
-	} else {
+	configFileName := tspath.ResolvePath(currentDirectory, "tsconfig.json")
+	if tsconfig != "" {
 		configFileName = tspath.ResolvePath(currentDirectory, tsconfig)
-		if !fs.FileExists(tspath.RootedFilePathFromAbsolute(configFileName)) {
+	}
+	currentDirectory = tspath.GetDirectoryPath(configFileName)
+	fs := bundled.WrapFS(cachedvfs.From(createFileSystem(currentDirectory)))
+	if !fs.FileExists(tspath.RootedFilePathFromAbsolute(configFileName)) {
+		if tsconfig != "" {
 			fmt.Fprintf(os.Stderr, "error: tsconfig %q doesn't exist", tsconfig)
 			return 1
 		}
+		fs = utils.NewOverlayVFS(fs, map[string]string{configFileName: "{}"})
 	}
-
-	currentDirectory = tspath.GetDirectoryPath(configFileName)
 
 	host := utils.CreateCompilerHost(currentDirectory, fs)
 

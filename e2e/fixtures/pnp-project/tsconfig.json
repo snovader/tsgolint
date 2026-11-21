@@ -1,0 +1,6 @@
+{
+  "extends": "@fixture/config/base",
+  "files": [
+    "index.ts"
+  ]
+}
